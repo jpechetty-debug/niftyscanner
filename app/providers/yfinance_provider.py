@@ -17,6 +17,7 @@ import pandas as pd
 import yfinance as yf
 
 from app.cache.pe_cache import PECache
+from app.cache.bar_cache import BarCache
 from app.core.circuit_breaker import CircuitBreaker, CircuitState
 from app.core.config import Settings
 from app.core.interfaces import Clock, MarketDataProvider
@@ -34,6 +35,7 @@ class YFinanceProvider(MarketDataProvider):
         download_breaker: Optional[CircuitBreaker] = None,
         pe_breaker: Optional[CircuitBreaker] = None,
         pe_cache: Optional[PECache] = None,
+        bar_cache: Optional[BarCache] = None,
     ) -> None:
         self.config = config
         self.clock = clock or SystemClock()
@@ -55,6 +57,7 @@ class YFinanceProvider(MarketDataProvider):
             ttl_hours=config.PE_CACHE_TTL_HOURS,
             clock=self.clock,
         )
+        self.bar_cache = bar_cache or BarCache(clock=self.clock)
 
     @staticmethod
     def _fail_all(
@@ -134,18 +137,42 @@ class YFinanceProvider(MarketDataProvider):
             chunk_df = None
             last_err = None
 
+            needs_full = []
+            needs_delta = []
+            
+            for t in chunk:
+                if self.bar_cache.get_bars(t) is not None:
+                    needs_delta.append(t)
+                else:
+                    needs_full.append(t)
+                    
+            chunk_df_full = None
+            chunk_df_delta = None
+            last_err = None
+
             for attempt in range(self.config.MAX_RETRIES):
                 try:
-                    chunk_df = yf.download(
-                        tickers=chunk,
-                        period="3mo",
-                        interval="1d",
-                        auto_adjust=True,
-                        threads=self.config.DOWNLOAD_THREADS,
-                        progress=False,
-                    )
+                    if needs_full:
+                        chunk_df_full = yf.download(
+                            tickers=needs_full,
+                            period="3mo",
+                            interval="1d",
+                            auto_adjust=True,
+                            threads=self.config.DOWNLOAD_THREADS,
+                            progress=False,
+                        )
+                    if needs_delta:
+                        chunk_df_delta = yf.download(
+                            tickers=needs_delta,
+                            period="5d",
+                            interval="1d",
+                            auto_adjust=True,
+                            threads=self.config.DOWNLOAD_THREADS,
+                            progress=False,
+                        )
                     # Check if empty frame was returned without raising
-                    if chunk_df is None or chunk_df.empty:
+                    if (needs_full and (chunk_df_full is None or chunk_df_full.empty)) or \
+                       (needs_delta and (chunk_df_delta is None or chunk_df_delta.empty)):
                         last_err = "Empty DataFrame returned from yf.download"
                         backoff = (2**attempt) + random.uniform(0.1, 0.5)
                         self.clock.sleep(backoff)
@@ -157,7 +184,8 @@ class YFinanceProvider(MarketDataProvider):
                     self.clock.sleep(backoff)
 
             # Check for systemic chunk failure
-            if chunk_df is None or chunk_df.empty:
+            if (needs_full and (chunk_df_full is None or chunk_df_full.empty)) or \
+               (needs_delta and (chunk_df_delta is None or chunk_df_delta.empty)):
                 self.download_breaker.record_systemic_failure(
                     f"Chunk {idx+1} failed after {self.config.MAX_RETRIES} retries: {last_err}"
                 )
@@ -170,10 +198,10 @@ class YFinanceProvider(MarketDataProvider):
                 )
                 continue
 
-            # Check if > 50% of the chunk returned all-NaN columns (systemic degradation)
             all_nan_count = 0
             for ticker in chunk:
-                t_df = self._extract_ticker_df(chunk_df, ticker)
+                source_df = chunk_df_delta if ticker in needs_delta else chunk_df_full
+                t_df = self._extract_ticker_df(source_df, ticker)
                 if t_df is None or ("Close" in t_df.columns and t_df["Close"].isna().all()):
                     all_nan_count += 1
 
@@ -186,7 +214,8 @@ class YFinanceProvider(MarketDataProvider):
 
             # Process individual symbols in chunk
             for ticker in chunk:
-                ticker_df = self._extract_ticker_df(chunk_df, ticker)
+                source_df = chunk_df_delta if ticker in needs_delta else chunk_df_full
+                ticker_df = self._extract_ticker_df(source_df, ticker)
                 if ticker_df is None or ticker_df.empty:
                     failures.append(
                         FailedSymbolItem(
@@ -206,6 +235,7 @@ class YFinanceProvider(MarketDataProvider):
                         )
                     )
                 else:
+                    ticker_df = self.bar_cache.update_bars(ticker, ticker_df)
                     results[ticker] = ticker_df
 
         return results, request_count, failures

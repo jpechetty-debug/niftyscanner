@@ -102,6 +102,28 @@ def test_volume_metrics_edge_cases():
     assert code == FailureCode.INVALID_VOLUME
 
 
+def test_volume_metrics_projection():
+    """Verify that current_volume is projected when elapsed_fraction < 1.0."""
+    lookback = 20
+    # Average volume = 100,000
+    vols = [100_000.0] * lookback + [50_000.0]
+    
+    # 1. No projection (fraction = 1.0)
+    cur, avg20, ratio, code, msg = compute_volume_metrics(pd.Series(vols), lookback=lookback, elapsed_fraction=1.0)
+    assert cur == 50_000
+    assert avg20 == 100_000.0
+    assert ratio == 0.5
+    
+    # 2. Projection (fraction = 0.5)
+    cur, avg20, ratio, code, msg = compute_volume_metrics(pd.Series(vols), lookback=lookback, elapsed_fraction=0.5)
+    assert cur == 50_000
+    assert avg20 == 100_000.0
+    assert ratio == 1.0  # (50,000 / 0.5) / 100,000 = 1.0
+    
+    # 3. Projection (fraction = 0.25)
+    cur, avg20, ratio, code, msg = compute_volume_metrics(pd.Series(vols), lookback=lookback, elapsed_fraction=0.25)
+    assert ratio == 2.0  # (50,000 / 0.25) / 100,000 = 2.0
+
 def test_data_hygiene_dedupe_and_nan_close():
     """Verify deduplication by date (keep last) and Close NaN dropping only."""
     calendar = MarketCalendar("NSE")

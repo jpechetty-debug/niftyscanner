@@ -46,7 +46,9 @@ def create_app(
     download_breakers: Dict[str, CircuitBreaker] = {}
     pe_breakers: Dict[str, CircuitBreaker] = {}
     pe_cache = PECache(ttl_hours=cfg.PE_CACHE_TTL_HOURS, clock=clk)
-
+    
+    from app.cache.bar_cache import BarCache
+    bar_cache = BarCache(clock=clk)
     # Multi-market universes
     universes: Dict[str, Universe] = {}
     if isinstance(universe_loader, dict):
@@ -87,6 +89,7 @@ def create_app(
             download_breaker=download_breakers[m],
             pe_breaker=pe_breakers[m],
             pe_cache=pe_cache,
+            bar_cache=bar_cache,
         )
         
         scanner_services[m] = StockScannerService(

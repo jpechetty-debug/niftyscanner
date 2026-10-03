@@ -47,7 +47,6 @@ def _init_db(conn: sqlite3.Connection):
             price REAL,
             pe REAL,
             rsi REAL,
-            rsi_trend REAL,
             volume INTEGER,
             avg_volume_20d REAL,
             volume_ratio REAL,
@@ -128,12 +127,12 @@ def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data")
         for sig in signals:
             cursor.execute("""
                 INSERT INTO signals (
-                    scan_id, ticker, name, market, price, pe, rsi, rsi_trend,
+                    scan_id, ticker, name, market, price, pe, rsi,
                     volume, avg_volume_20d, volume_ratio, score, session_partial, bar_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 scan_id, sig.get("ticker"), sig.get("name"), sig.get("market"),
-                sig.get("price"), sig.get("pe"), sig.get("rsi"), sig.get("rsi_trend"),
+                sig.get("price"), sig.get("pe"), sig.get("rsi"),
                 sig.get("volume"), sig.get("avg_volume_20d"), sig.get("volume_ratio"),
                 sig.get("score"), 1 if sig.get("session_partial") else 0, sig.get("bar_date")
             ))
