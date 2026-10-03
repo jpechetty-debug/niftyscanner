@@ -112,6 +112,11 @@ class Settings(BaseSettings):
                 f"MIN_VOLUME_RATIO ({self.MIN_VOLUME_RATIO})"
             )
 
+        if not (0.0 < self.MIN_VOLUME_PROJECTION_ELAPSED <= 1.0):
+            raise ValueError(
+                f"MIN_VOLUME_PROJECTION_ELAPSED must be in (0, 1], got {self.MIN_VOLUME_PROJECTION_ELAPSED}"
+            )
+
         if not (self.MAX_PE > self.MIN_PE):
             raise ValueError(
                 f"P/E thresholds must satisfy MAX_PE > MIN_PE, "

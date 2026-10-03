@@ -268,3 +268,17 @@ def test_session_elapsed_fraction_bounds():
     mid = cal.get_session_elapsed_fraction(datetime(2026, 10, 1, 6, 52, 30, tzinfo=timezone.utc))      # ~half-way
     assert 0.45 < mid < 0.55
     assert 0.0 < cal.get_session_elapsed_fraction(datetime(2026, 10, 1, 3, 46, tzinfo=timezone.utc)) <= 0.02
+
+
+def test_volume_projection_floor_is_validated_and_caps_multiplier():
+    import pytest
+    from pydantic import ValidationError
+    from app.core.indicators import compute_volume_metrics
+
+    for bad in (0.0, -1.0, 5.0):
+        with pytest.raises(ValidationError, match="MIN_VOLUME_PROJECTION_ELAPSED"):
+            Settings(MIN_VOLUME_PROJECTION_ELAPSED=bad)
+
+    vol = pd.Series([100000.0] * 21 + [4000.0])
+    _, _, ratio, *_ = compute_volume_metrics(vol, 20, elapsed_fraction=0.01, min_elapsed_fraction=0.25)
+    assert abs(ratio - 0.16) < 1e-9  # 4000 / 0.25 / 100000, not 4000 / 0.01 / 100000
