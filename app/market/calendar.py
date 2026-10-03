@@ -137,6 +137,31 @@ class MarketCalendar:
         local_today = self.to_exchange_local(current_dt).date()
         return (bar_date == local_today) and self.is_market_open(current_dt)
 
+    def get_session_elapsed_fraction(self, dt: datetime) -> float:
+        """Return the fraction of the current session that has elapsed [0.0 - 1.0]."""
+        if not self.is_market_open(dt):
+            return 1.0
+            
+        local_date_str = self.to_exchange_local(dt).strftime("%Y-%m-%d")
+        if not self.calendar.is_session(local_date_str):
+            return 1.0
+            
+        sess = self.calendar.date_to_session(local_date_str)
+        open_ts = self.calendar.session_open(sess)
+        close_ts = self.calendar.session_close(sess)
+        
+        # Ensure UTC timezone aware for duration math
+        utc_ts = pd.Timestamp(dt).tz_convert("UTC") if pd.Timestamp(dt).tzinfo else pd.Timestamp(dt, tz="UTC")
+        
+        total_duration = (close_ts - open_ts).total_seconds()
+        elapsed = (utc_ts - open_ts).total_seconds()
+        
+        if total_duration <= 0:
+            return 1.0
+            
+        frac = elapsed / total_duration
+        return max(0.01, min(1.0, frac))
+
     def get_market_status(self, dt: datetime) -> MarketStatusInfo:
         """Return comprehensive status info for API / UI."""
         local_dt = self.to_exchange_local(dt)

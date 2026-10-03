@@ -13,6 +13,7 @@ import sys
 from typing import Any, Dict, List, Optional
 import pandas as pd
 import streamlit as st
+import plotly.express as px
 
 # Ensure ui directory is in path for api_client import without app dependencies
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -95,21 +96,49 @@ def live_status_and_countdown_fragment(market: str) -> None:
             st.metric("Effective Interval", f"{eff_int}s", help=f"Last scan duration: {last_sec}s")
 
         with col4:
-            # Refresh action button
             if st.button("🔄 Trigger Scan Now", use_container_width=True, disabled=is_scanning):
                 success, msg, retry_after = api_client.post_refresh(market=market)
                 if success:
-                    st.success("Scan scheduled successfully! Results will update shortly.")
+                    st.toast("Scan scheduled successfully! Results will update shortly.", icon="🔄")
                 else:
-                    st.warning(msg or "Refresh currently not permitted.")
+                    st.toast(msg or "Refresh currently not permitted.", icon="⚠️")
     else:
         st.error(f"Cannot reach API status service: {err}")
+
+
+def apply_custom_css():
+    st.markdown("""
+        <style>
+        /* Import Inter font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif !important;
+        }
+        
+        /* Metric cards styling */
+        [data-testid="stMetric"] {
+            background-color: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Metric value styling */
+        [data-testid="stMetricValue"] {
+            color: #0D6EFD;
+            font-weight: 700;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
 
 # ==============================================================================
 # Main Application Flow
 # ==============================================================================
 def main() -> None:
+    apply_custom_css()
     st.title("⚡ Quantitative Stock Screener")
     st.caption(
         "Screening criteria: **RSI(14) > 50**, **Volume > 2x 20-day Average**, **Trailing P/E < 20**. "
@@ -205,70 +234,115 @@ def results_fragment(
             f"Reason(s): {reasons_str}"
         )
 
-    # 5. Screening Results Table
-    st.subheader(f"Screening Survivors ({len(results_list)} Stocks Meeting All Criteria)")
+    # 5. Tabbed Interface
+    tab_results, tab_visualizations, tab_diagnostics = st.tabs([
+        "📊 Screener Results",
+        "📈 Visualizations",
+        "⚙️ Diagnostics"
+    ])
 
-    if results_list:
-        df = pd.DataFrame(results_list)
-        filtered_df = filter_results_dataframe(
-            df=df,
-            search_query=search_query,
-            min_rsi=min_rsi,
-            min_vol_ratio=min_vol_ratio,
-            max_pe=max_pe,
-            partial_only=partial_only,
-        )
+    with tab_results:
+        st.subheader(f"Screening Survivors ({len(results_list)} Stocks Meeting All Criteria)")
 
-        display_cols = [
-            "ticker",
-            "name",
-            "market",
-            "price",
-            "pe",
-            "rsi",
-            "volume",
-            "avg_volume_20d",
-            "volume_ratio",
-            "score",
-            "session_partial",
-            "bar_date",
-        ]
-        available_cols = [c for c in display_cols if c in filtered_df.columns]
-        view_df = filtered_df[available_cols].copy()
+        if results_list:
+            df = pd.DataFrame(results_list)
+            filtered_df = filter_results_dataframe(
+                df=df,
+                search_query=search_query,
+                min_rsi=min_rsi,
+                min_vol_ratio=min_vol_ratio,
+                max_pe=max_pe,
+                partial_only=partial_only,
+            )
 
-        st.dataframe(
-            view_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "ticker": st.column_config.TextColumn("Ticker"),
-                "name": st.column_config.TextColumn("Company Name"),
-                "price": st.column_config.NumberColumn(f"Price ({CURRENCY.get(market, '')})", format="%.2f"),
-                "pe": st.column_config.NumberColumn("P/E Ratio", format="%.2f"),
-                "rsi": st.column_config.NumberColumn("RSI(14)", format="%.2f"),
-                "volume": st.column_config.NumberColumn("Latest Vol", format="%d"),
-                "avg_volume_20d": st.column_config.NumberColumn("20d Avg Vol", format="%.0f"),
-                "volume_ratio": st.column_config.NumberColumn("Vol Ratio", format="%.2fx"),
-                "score": st.column_config.NumberColumn("Rank Score", format="%.4f"),
-                "session_partial": st.column_config.CheckboxColumn("Partial"),
-                "bar_date": st.column_config.DateColumn("Bar Date"),
-            },
-        )
+            display_cols = [
+                "ticker",
+                "name",
+                "market",
+                "price",
+                "pe",
+                "rsi",
+                "rsi_trend",
+                "volume",
+                "avg_volume_20d",
+                "volume_ratio",
+                "score",
+                "session_partial",
+                "bar_date",
+            ]
+            available_cols = [c for c in display_cols if c in filtered_df.columns]
+            view_df = filtered_df[available_cols].copy()
 
-        # CSV Export Button
-        csv_text = view_df.to_csv(index=False)
-        st.download_button(
-            label="📥 Export Filtered Table to CSV",
-            data=csv_text,
-            file_name=f"screener_{market}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv",
-        )
-    else:
-        st.info("No stocks currently satisfy all three screening conditions.")
+            st.dataframe(
+                view_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "ticker": st.column_config.TextColumn("Ticker"),
+                    "name": st.column_config.TextColumn("Company Name"),
+                    "price": st.column_config.NumberColumn(f"Price ({CURRENCY.get(market, '')})", format="%.2f"),
+                    "pe": st.column_config.NumberColumn("P/E Ratio", format="%.2f"),
+                    "rsi": st.column_config.ProgressColumn("RSI(14)", format="%.2f", min_value=0, max_value=100),
+                    "rsi_trend": st.column_config.NumberColumn("RSI Trend", format="%+.2f"),
+                    "volume": st.column_config.NumberColumn("Latest Vol", format="%d"),
+                    "avg_volume_20d": st.column_config.NumberColumn("20d Avg Vol", format="%.0f"),
+                    "volume_ratio": st.column_config.NumberColumn("Vol Ratio", format="%.2fx"),
+                    "score": st.column_config.NumberColumn("Rank Score", format="%.4f"),
+                    "session_partial": st.column_config.CheckboxColumn("Partial"),
+                    "bar_date": st.column_config.DateColumn("Bar Date"),
+                },
+            )
 
-    # 6. Diagnostic Funnel & Metrics Expander
-    funnel = meta.get("funnel", {})
-    with st.expander("📊 Screening Funnel & Pipeline Diagnostics", expanded=False):
+            # CSV Export Button
+            csv_text = view_df.to_csv(index=False)
+            st.download_button(
+                label="📥 Export Filtered Table to CSV",
+                data=csv_text,
+                file_name=f"screener_{market}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("No stocks currently satisfy all three screening conditions.")
+
+    with tab_visualizations:
+        st.subheader("Data Insights")
+        if results_list and not view_df.empty:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig_scatter = px.scatter(
+                    view_df,
+                    x="pe",
+                    y="volume_ratio",
+                    size="rsi",
+                    color="score",
+                    hover_name="ticker",
+                    hover_data=["name", "price", "rsi"],
+                    title="Value vs. Momentum",
+                    labels={"pe": "Trailing P/E", "volume_ratio": "Volume Ratio (x)", "score": "Rank Score"},
+                    color_continuous_scale="Blues",
+                )
+                fig_scatter.update_layout(margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_scatter, use_container_width=True)
+                
+            with col2:
+                fig_hist = px.histogram(
+                    view_df,
+                    x="rsi",
+                    nbins=10,
+                    title="RSI Distribution",
+                    labels={"rsi": "RSI(14)"},
+                    color_discrete_sequence=["#0D6EFD"],
+                )
+                fig_hist.update_layout(margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_hist, use_container_width=True)
+        else:
+            st.info("No data available to visualize. Adjust filters or wait for more results.")
+
+    with tab_diagnostics:
+        # 6. Diagnostic Funnel & Metrics
+        funnel = meta.get("funnel", {})
+        st.subheader("📊 Screening Funnel & Pipeline Diagnostics")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Constituents in Universe", funnel.get("universe", 0))
         c2.metric("Successfully Fetched", funnel.get("fetched", 0))
@@ -280,12 +354,15 @@ def results_fragment(
         c6.metric("Filtered by Volume", funnel.get("filtered_volume", 0))
         c7.metric("Filtered by P/E", funnel.get("filtered_pe", 0))
         c8.metric("Data / System Failures", funnel.get("failed", 0))
+        if funnel.get("filtered_rsi_trend", 0):
+            st.caption(f"Also excluded by RSI trend filter: {funnel['filtered_rsi_trend']}")
         if funnel.get("filtered_liquidity", 0):
             st.caption(f"Also excluded by liquidity floor: {funnel['filtered_liquidity']}")
 
-    # 7. Failed Symbols Expander
-    if failures_list:
-        with st.expander(f"⚠️ Failed Symbols & Data Issues ({len(failures_list)})", expanded=False):
+        # 7. Failed Symbols
+        if failures_list:
+            st.markdown("---")
+            st.subheader(f"⚠️ Failed Symbols & Data Issues ({len(failures_list)})")
             fail_df = pd.DataFrame(failures_list)
             st.dataframe(fail_df, use_container_width=True, hide_index=True)
 

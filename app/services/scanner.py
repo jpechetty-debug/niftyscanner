@@ -150,6 +150,7 @@ class StockScannerService:
                             volume_ratio=indicator.volume_ratio,
                             score=score,
                             session_partial=indicator.session_partial,
+                            rsi_trend=indicator.rsi_trend,
                             bar_date=indicator.bar_date.isoformat(),
                         )
                     )

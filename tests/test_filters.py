@@ -23,6 +23,7 @@ def make_dummy_indicator(rsi: float, vol_ratio: float, avg20: float = 100_000.0)
         avg_volume_20d=avg20,
         volume_ratio=vol_ratio,
         session_partial=False,
+        rsi_trend=1.0,
     )
 
 
@@ -53,27 +54,16 @@ def test_stage1_exact_boundaries():
     assert tracker.filtered_volume == 0
 
 
-def test_stage2_pe_exact_boundary():
-    """Verify strict inequality for Stage 2 P/E filter (strict < MAX_PE)."""
+def test_stage2_pe_always_passes():
+    """Verify Stage 2 P/E filter always passes, deferring to scoring."""
     config = Settings(MAX_PE=20.0, MIN_PE=0.0)
 
-    # Case 1: Exact boundary PE == 20.0 -> must FAIL (strict <)
     tracker = FunnelTracker()
-    assert apply_stage2_pe_filter(20.0, config, tracker) is False
-    assert tracker.filtered_pe == 1
-    assert tracker.passed_pe == 0
-
-    # Case 2: Just below threshold (19.999) -> must PASS
-    tracker = FunnelTracker()
-    assert apply_stage2_pe_filter(19.999, config, tracker) is True
-    assert tracker.passed_pe == 1
+    assert apply_stage2_pe_filter(20.0, config, tracker) is True
+    assert apply_stage2_pe_filter(-5.0, config, tracker) is True
+    assert apply_stage2_pe_filter(500.0, config, tracker) is True
+    assert tracker.passed_pe == 3
     assert tracker.filtered_pe == 0
-
-    # Case 3: MIN_PE floor test
-    config_min_pe = Settings(MAX_PE=20.0, MIN_PE=5.0)
-    tracker = FunnelTracker()
-    assert apply_stage2_pe_filter(4.9, config_min_pe, tracker) is False
-    assert tracker.filtered_pe == 1
 
 
 def test_evaluate_pe_value_classifications():
@@ -88,14 +78,14 @@ def test_evaluate_pe_value_classifications():
     assert val is None
     assert code == FailureCode.INVALID_PE
 
-    # Non-positive (<= 0)
+    # Non-positive (<= 0) are now valid
     val, code, _ = evaluate_pe_value(0.0)
-    assert val is None
-    assert code == FailureCode.INVALID_PE
+    assert val == 0.0
+    assert code is None
 
     val, code, _ = evaluate_pe_value(-5.0)
-    assert val is None
-    assert code == FailureCode.INVALID_PE
+    assert val == -5.0
+    assert code is None
 
     # NaN / Inf
     val, code, _ = evaluate_pe_value(float("nan"))

@@ -51,6 +51,7 @@ class FunnelCounts(BaseModel):
     fetched: int = 0
     failed: int = 0
     filtered_rsi: int = 0
+    filtered_rsi_trend: int = 0
     filtered_volume: int = 0
     filtered_liquidity: int = 0
     passed_rsi_volume: int = 0
@@ -65,6 +66,7 @@ class FunnelTracker:
     fetched: int = 0
     failed: int = 0
     filtered_rsi: int = 0
+    filtered_rsi_trend: int = 0
     filtered_volume: int = 0
     filtered_liquidity: int = 0
     passed_rsi_volume: int = 0
@@ -86,6 +88,7 @@ class FunnelTracker:
             fetched=self.fetched,
             failed=self.failed,
             filtered_rsi=self.filtered_rsi,
+            filtered_rsi_trend=self.filtered_rsi_trend,
             filtered_volume=self.filtered_volume,
             filtered_liquidity=self.filtered_liquidity,
             passed_rsi_volume=self.passed_rsi_volume,

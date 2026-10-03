@@ -61,11 +61,22 @@ def test_save_last_scan_and_startup_load(tmp_path: Path):
     # Save to custom test directory
     saved_path = save_last_scan(market="NSE", payload=payload, data_dir=str(tmp_path))
     assert saved_path.exists()
+    assert saved_path.name == "history.db"
 
-    with open(saved_path, "r", encoding="utf-8") as f:
-        disk_raw = json.load(f)
-    assert disk_raw.get("schema_version") == 1
-    assert disk_raw["meta"]["stale"] is False
+    import sqlite3
+    conn = sqlite3.connect(str(saved_path))
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM scans WHERE market = 'NSE'")
+    scan = cursor.fetchone()
+    assert scan is not None
+    assert scan["scan_seconds"] == 12.5
+    
+    cursor.execute("SELECT * FROM signals WHERE scan_id = ?", (scan["id"],))
+    signals = cursor.fetchall()
+    assert len(signals) == 1
+    assert signals[0]["ticker"] == "TEST1.NS"
+    conn.close()
 
     # Load on startup -> Must be marked stale = True
     startup_data = load_last_scan_on_startup(market="NSE", data_dir=str(tmp_path))

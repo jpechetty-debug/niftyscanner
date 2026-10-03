@@ -57,13 +57,25 @@ def create_app(
     )
     pe_cache = PECache(ttl_hours=cfg.PE_CACHE_TTL_HOURS, clock=clk)
 
-    data_provider = provider or YFinanceProvider(
+    yfinance_provider = provider or YFinanceProvider(
         config=cfg,
         clock=clk,
         download_breaker=download_breaker,
         pe_breaker=pe_breaker,
         pe_cache=pe_cache,
     )
+    
+    if cfg.USE_JUGAAD_FOR_NSE:
+        from app.providers.jugaad_provider import JugaadProvider
+        jugaad_provider = JugaadProvider(
+            config=cfg,
+            clock=clk,
+            download_breaker=download_breaker,
+            pe_breaker=pe_breaker,
+            pe_cache=pe_cache,
+        )
+    else:
+        jugaad_provider = yfinance_provider
 
     # Multi-market universes
     universes: Dict[str, Universe] = {}
@@ -81,9 +93,10 @@ def create_app(
     scanner_services: Dict[str, StockScannerService] = {}
     for m in cfg.enabled_markets_list:
         cal = calendars.get(m, MarketCalendar(market=m))
+        market_provider = jugaad_provider if m == "NSE" and cfg.USE_JUGAAD_FOR_NSE else yfinance_provider
         scanner_services[m] = StockScannerService(
             config=cfg,
-            provider=data_provider,
+            provider=market_provider,
             calendar=cal,
             clock=clk,
         )
@@ -137,7 +150,7 @@ def create_app(
     app.state.config = cfg
     app.state.clock = clk
     app.state.calendars = calendars
-    app.state.provider = data_provider
+    app.state.provider = yfinance_provider
     app.state.state_manager = state_manager
     app.state.scheduler = scheduler
 

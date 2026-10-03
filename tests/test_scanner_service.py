@@ -64,9 +64,7 @@ def test_scanner_end_to_end_synthetic():
     # TEST3.NS has best breakout and valuation, should be ranked #1
     assert result_tickers[0] == "TEST3.NS"
 
-    # All results must have valid scores, positive volume ratio, and valid RSI
     for r in results:
         assert r.score >= 0.0
         assert r.volume_ratio > config.MIN_VOLUME_RATIO
         assert r.rsi > config.MIN_RSI
-        assert r.pe < config.MAX_PE

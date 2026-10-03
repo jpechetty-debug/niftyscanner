@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     REFRESH_COOLDOWN_SEC: int = 30
 
     # Download & Data Fetching
+    USE_JUGAAD_FOR_NSE: bool = True
     CHUNK_SIZE: int = 100
     CHUNK_DELAY_MIN_SEC: float = 1.0
     CHUNK_DELAY_MAX_SEC: float = 2.0
@@ -62,6 +63,7 @@ class Settings(BaseSettings):
     RSI_PERIOD: int = 14
     MIN_RSI: float = 50.0
     RSI_CAP: float = 80.0
+    REQUIRE_RSI_TRENDING: bool = True
     MIN_VOLUME_RATIO: float = 2.0
     VOLUME_RATIO_CAP: float = 10.0
     VOLUME_LOOKBACK: int = 20

@@ -138,7 +138,7 @@ class YFinanceProvider(MarketDataProvider):
                 try:
                     chunk_df = yf.download(
                         tickers=chunk,
-                        period="6mo",
+                        period="3mo",
                         interval="1d",
                         auto_adjust=True,
                         threads=self.config.DOWNLOAD_THREADS,

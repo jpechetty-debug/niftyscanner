@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,63 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 SCHEMA_VERSION = 1
+
+def _get_db_connection(data_dir: str) -> sqlite3.Connection:
+    Path(data_dir).mkdir(parents=True, exist_ok=True)
+    db_path = Path(data_dir) / "history.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    _init_db(conn)
+    return conn
+
+def _init_db(conn: sqlite3.Connection):
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            market TEXT,
+            timestamp TEXT,
+            scan_seconds REAL,
+            request_count INTEGER,
+            universe INTEGER,
+            fetched INTEGER,
+            failed INTEGER,
+            filtered_rsi INTEGER,
+            filtered_rsi_trend INTEGER,
+            filtered_volume INTEGER,
+            filtered_liquidity INTEGER,
+            passed_rsi_volume INTEGER,
+            filtered_pe INTEGER,
+            passed_pe INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id INTEGER,
+            ticker TEXT,
+            name TEXT,
+            market TEXT,
+            price REAL,
+            pe REAL,
+            rsi REAL,
+            rsi_trend REAL,
+            volume INTEGER,
+            avg_volume_20d REAL,
+            volume_ratio REAL,
+            score REAL,
+            session_partial INTEGER,
+            bar_date TEXT,
+            FOREIGN KEY(scan_id) REFERENCES scans(id)
+        );
+        CREATE TABLE IF NOT EXISTS failures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id INTEGER,
+            ticker TEXT,
+            stage TEXT,
+            code TEXT,
+            message TEXT,
+            FOREIGN KEY(scan_id) REFERENCES scans(id)
+        );
+    """)
+    conn.commit()
 
 
 def atomic_write_json(file_path: Path | str, data: Dict[str, Any]) -> None:
@@ -36,41 +94,125 @@ def atomic_write_json(file_path: Path | str, data: Dict[str, Any]) -> None:
 
 
 def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data") -> Path:
-    """Persist successful scan payload to data/last_scan_{MARKET}.json atomically."""
-    file_path = Path(data_dir) / f"last_scan_{market.upper()}.json"
-    data_with_schema = {
-        "schema_version": SCHEMA_VERSION,
-        **payload,
-    }
-    atomic_write_json(file_path, data_with_schema)
-    logger.info(f"Persisted last scan results atomically to {file_path}")
-    return file_path
+    """Persist successful scan payload to SQLite database."""
+    conn = _get_db_connection(data_dir)
+    try:
+        cursor = conn.cursor()
+        meta = payload.get("meta", {})
+        funnel = meta.get("funnel", {})
+        
+        cursor.execute("""
+            INSERT INTO scans (
+                market, timestamp, scan_seconds, request_count,
+                universe, fetched, failed, filtered_rsi, filtered_rsi_trend,
+                filtered_volume, filtered_liquidity, passed_rsi_volume,
+                filtered_pe, passed_pe
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            market.upper(),
+            meta.get("last_refreshed"),
+            meta.get("scan_seconds", 0.0),
+            meta.get("request_count", 0),
+            funnel.get("universe", 0),
+            funnel.get("fetched", 0),
+            funnel.get("failed", 0),
+            funnel.get("filtered_rsi", 0),
+            funnel.get("filtered_rsi_trend", 0),
+            funnel.get("filtered_volume", 0),
+            funnel.get("filtered_liquidity", 0),
+            funnel.get("passed_rsi_volume", 0),
+            funnel.get("filtered_pe", 0),
+            funnel.get("passed_pe", 0)
+        ))
+        scan_id = cursor.lastrowid
+        
+        signals = payload.get("results", [])
+        for sig in signals:
+            cursor.execute("""
+                INSERT INTO signals (
+                    scan_id, ticker, name, market, price, pe, rsi, rsi_trend,
+                    volume, avg_volume_20d, volume_ratio, score, session_partial, bar_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                scan_id, sig.get("ticker"), sig.get("name"), sig.get("market"),
+                sig.get("price"), sig.get("pe"), sig.get("rsi"), sig.get("rsi_trend"),
+                sig.get("volume"), sig.get("avg_volume_20d"), sig.get("volume_ratio"),
+                sig.get("score"), 1 if sig.get("session_partial") else 0, sig.get("bar_date")
+            ))
+            
+        failures = payload.get("failed_symbols", [])
+        for f in failures:
+            cursor.execute("""
+                INSERT INTO failures (scan_id, ticker, stage, code, message)
+                VALUES (?, ?, ?, ?, ?)
+            """, (scan_id, f.get("ticker"), f.get("stage"), f.get("code"), f.get("message")))
+            
+        conn.commit()
+        logger.info(f"Persisted scan results for {market} to SQLite database.")
+        return Path(data_dir) / "history.db"
+    finally:
+        conn.close()
 
 
 def load_last_scan_on_startup(market: str, data_dir: str = "data") -> Optional[Dict[str, Any]]:
-    """Load persisted scan from disk on startup, marking stale = True."""
-    file_path = Path(data_dir) / f"last_scan_{market.upper()}.json"
-    if not file_path.exists():
+    """Load persisted scan from SQLite on startup, marking stale = True."""
+    db_path = Path(data_dir) / "history.db"
+    if not db_path.exists():
         return None
 
+    conn = _get_db_connection(data_dir)
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        # Mark as stale upon startup until first new scan completes
-        if "meta" in data and isinstance(data["meta"], dict):
-            data["meta"]["stale"] = True
-            reasons = data["meta"].get("stale_reasons", [])
-            startup_msg = "Loaded from disk on startup; awaiting initial scan"
-            if startup_msg not in reasons:
-                reasons.append(startup_msg)
-            data["meta"]["stale_reasons"] = reasons
-
-        logger.info(f"Loaded initial scan state from {file_path} (marked stale).")
-        return data
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM scans WHERE market = ? ORDER BY id DESC LIMIT 1",
+            (market.upper(),)
+        )
+        scan = cursor.fetchone()
+        if not scan:
+            return None
+            
+        scan_id = scan["id"]
+        
+        cursor.execute("SELECT * FROM signals WHERE scan_id = ?", (scan_id,))
+        signals = [dict(r) for r in cursor.fetchall()]
+        for sig in signals:
+            sig["session_partial"] = bool(sig["session_partial"])
+            
+        cursor.execute("SELECT * FROM failures WHERE scan_id = ?", (scan_id,))
+        failures = [dict(r) for r in cursor.fetchall()]
+        
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "meta": {
+                "stale": True,
+                "stale_reasons": ["Loaded from disk on startup; awaiting initial scan"],
+                "last_refreshed": scan["timestamp"],
+                "scan_seconds": scan["scan_seconds"],
+                "request_count": scan["request_count"],
+                "funnel": {
+                    "universe": scan["universe"],
+                    "fetched": scan["fetched"],
+                    "failed": scan["failed"],
+                    "filtered_rsi": scan["filtered_rsi"],
+                    "filtered_rsi_trend": scan["filtered_rsi_trend"],
+                    "filtered_volume": scan["filtered_volume"],
+                    "filtered_liquidity": scan["filtered_liquidity"],
+                    "passed_rsi_volume": scan["passed_rsi_volume"],
+                    "filtered_pe": scan["filtered_pe"],
+                    "passed_pe": scan["passed_pe"],
+                }
+            },
+            "results": signals,
+            "failed_symbols": failures,
+        }
+        
+        logger.info(f"Loaded initial scan state from SQLite for {market} (marked stale).")
+        return payload
     except Exception as e:
-        logger.warning(f"Failed to load previous scan from {file_path}: {e}")
+        logger.warning(f"Failed to load previous scan from SQLite for {market}: {e}")
         return None
+    finally:
+        conn.close()
 
 
 def save_settings_file(settings_data: Dict[str, Any], file_path: str = "data/settings.json") -> Path:

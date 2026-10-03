@@ -37,6 +37,10 @@ def apply_stage1_filters(
         tracker.filtered_rsi += 1
         return False
 
+    if config.REQUIRE_RSI_TRENDING and indicator.rsi_trend <= 0:
+        tracker.filtered_rsi_trend += 1
+        return False
+
     if not (indicator.volume_ratio > config.MIN_VOLUME_RATIO):
         tracker.filtered_volume += 1
         return False
@@ -67,8 +71,8 @@ def evaluate_pe_value(
     except (ValueError, TypeError):
         return None, FailureCode.INVALID_PE, f"Trailing P/E is non-numeric: {pe_raw}"
 
-    if math.isnan(pe) or math.isinf(pe) or pe <= 0:
-        return None, FailureCode.INVALID_PE, f"Trailing P/E has invalid non-positive or infinite value: {pe}"
+    if math.isnan(pe) or math.isinf(pe):
+        return None, FailureCode.INVALID_PE, f"Trailing P/E has invalid non-numeric or infinite value: {pe}"
 
     return pe, None, None
 
@@ -90,15 +94,7 @@ def apply_stage2_pe_filter(
     """
     passed = True
 
-    if not (pe < config.MAX_PE):
-        passed = False
-
-    if config.MIN_PE > 0 and pe < config.MIN_PE:
-        passed = False
-
-    if passed:
-        tracker.passed_pe += 1
-    else:
-        tracker.filtered_pe += 1
-
-    return passed
+    # P/E filtering is now deferred to dynamic scoring. 
+    # We always pass it to the ranking stage.
+    tracker.passed_pe += 1
+    return True

@@ -30,9 +30,19 @@ def test_composite_score_and_clipping():
     # 2. Values at or exceeding caps (clipping check):
     # vol_ratio=15.0 -> V clips to 1.0
     # rsi=95.0 -> R clips to 1.0
-    # pe=0.0 -> P clips to 1.0 -> Score = 0.40*1 + 0.35*1 + 0.25*1 = 1.0
+    # pe=0.0 -> P clips to 0.0 (penalty) -> Score = 0.40*1 + 0.35*1 + 0.25*0 = 0.75
     score_max = calculate_composite_score(volume_ratio=15.0, rsi=95.0, pe=0.0, config=config)
-    assert score_max == 1.0
+    assert score_max == 0.75
+
+    # 2b. Very low positive PE gets near 1.0 for P
+    score_near_max = calculate_composite_score(volume_ratio=15.0, rsi=95.0, pe=0.1, config=config)
+    assert pytest.approx(score_near_max, abs=1e-2) == 1.0
+
+    # 2c. Extremely high PE penalty
+    score_high_pe = calculate_composite_score(volume_ratio=15.0, rsi=95.0, pe=40.0, config=config)
+    # PE=40, MAX_PE=20 -> penalty = (40-20)/20 = 1.0. p_clip = max(-1.0, -0.5 * 1.0) = -0.5
+    # Score = 0.40*1 + 0.35*1 + 0.25*(-0.5) = 0.75 - 0.125 = 0.625
+    assert pytest.approx(score_high_pe, abs=1e-3) == 0.625
 
     # 3. Intermediate check:
     # vol_ratio = 6.0 -> V = (6 - 2)/8 = 0.5
@@ -57,6 +67,7 @@ def test_deterministic_ranking_and_tie_breaks():
         volume_ratio=2.0,
         score=0.5000001,  # Rounds to 0.500000
         session_partial=False,
+        rsi_trend=1.0,
         bar_date="2026-10-01",
     )
     item_b = ScanResultItem(
@@ -71,6 +82,7 @@ def test_deterministic_ranking_and_tie_breaks():
         volume_ratio=3.0,  # Higher volume ratio
         score=0.5000004,  # Rounds to 0.500000 (tie with A)
         session_partial=False,
+        rsi_trend=1.0,
         bar_date="2026-10-01",
     )
     item_c = ScanResultItem(
@@ -85,6 +97,7 @@ def test_deterministic_ranking_and_tie_breaks():
         volume_ratio=4.0,
         score=0.75,  # Decisively higher score
         session_partial=False,
+        rsi_trend=1.0,
         bar_date="2026-10-01",
     )
     item_d = ScanResultItem(
@@ -99,6 +112,7 @@ def test_deterministic_ranking_and_tie_breaks():
         volume_ratio=3.0,  # Same vol ratio as BBB
         score=0.5000003,  # Rounds to 0.500000 (tie with BBB on score and vol)
         session_partial=False,
+        rsi_trend=1.0,
         bar_date="2026-10-01",
     )
 
