@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
 
 from app.cache.persistence import (
@@ -155,13 +155,20 @@ class ScanStateManager:
         elif last_ts is None:
             reasons.append(f"No successful scan has completed for {m} since server startup")
         else:
-            eff = self.get_effective_interval_sec(m)
-            max_age_sec = 3 * eff
-            age = (self.clock.now() - last_ts).total_seconds()
-            if age > max_age_sec:
-                reasons.append(
-                    f"Last successful scan is {int(age)}s old (exceeds 3x effective interval: {max_age_sec}s)"
-                )
+            now = self.clock.now()
+            cal = self.calendars.get(m)
+            if cal is not None and not cal.is_market_open(now):
+                # closed: fresh if captured after the last session closed
+                if last_ts < cal.last_session_close(now):
+                    reasons.append(f"No scan has run since the last {m} session closed")
+            else:
+                eff = self.get_effective_interval_sec(m)
+                max_age_sec = 3 * eff
+                age = (now - last_ts).total_seconds()
+                if age > max_age_sec:
+                    reasons.append(
+                        f"Last successful scan is {int(age)}s old (exceeds 3x effective interval: {max_age_sec}s)"
+                    )
 
         return len(reasons) > 0, reasons
 
@@ -206,8 +213,7 @@ class ScanStateManager:
         self.last_scan_request_count[m] = request_count
         self.last_scan_failed[m] = True
 
-        current_failures = self.failures_store.get(m, [])
-        self.failures_store[m] = current_failures + failures
+        self.failures_store[m] = failures   # replace, don't append (unbounded growth)
         logger.warning(f"Scan for {m} failed. Retaining prior results with stale=True.")
 
     def get_results_payload(self, market: str) -> Dict[str, Any]:

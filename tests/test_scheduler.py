@@ -77,7 +77,8 @@ def test_effective_interval_calculation():
 def test_stale_evaluation_rules():
     """Verify stale = true only when: breaker open, last scan failed, or age > 3x effective_interval."""
     config = Settings(REFRESH_INTERVAL_SEC=60)
-    clock = FakeClock(datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc))
+    # 06:00 UTC = 11:30 IST Thursday -> market OPEN, so the 3x-interval rule applies
+    clock = FakeClock(datetime(2026, 10, 1, 6, 0, tzinfo=timezone.utc))
     calendar = MarketCalendar("NSE")
     cb_down = CircuitBreaker("d", clock=clock)
     cb_pe = CircuitBreaker("p", clock=clock)

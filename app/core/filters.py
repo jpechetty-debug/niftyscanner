@@ -30,26 +30,23 @@ def apply_stage1_filters(
     Returns:
         True if all Stage 1 filters pass, False otherwise.
     """
-    passed = True
-
-    # 1. RSI check (strict >)
+    # Each symbol is attributed to exactly ONE bucket (first failing check), so that
+    # universe = failed + filtered_rsi + filtered_volume + filtered_liquidity
+    #            + filtered_pe + passed_pe always holds.
     if not (indicator.rsi > config.MIN_RSI):
         tracker.filtered_rsi += 1
-        passed = False
+        return False
 
-    # 2. Volume ratio check (strict >)
     if not (indicator.volume_ratio > config.MIN_VOLUME_RATIO):
         tracker.filtered_volume += 1
-        passed = False
+        return False
 
-    # 3. Minimum average volume floor (if active)
     if config.MIN_AVG_VOLUME > 0 and indicator.avg_volume_20d < config.MIN_AVG_VOLUME:
-        passed = False
+        tracker.filtered_liquidity += 1
+        return False
 
-    if passed:
-        tracker.passed_rsi_volume += 1
-
-    return passed
+    tracker.passed_rsi_volume += 1
+    return True
 
 
 def evaluate_pe_value(

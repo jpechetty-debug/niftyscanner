@@ -71,7 +71,7 @@ def filter_results_dataframe(
 @st.fragment(run_every=2)
 def live_status_and_countdown_fragment(market: str) -> None:
     """Displays real-time countdown, market status, and refresh controls with auto-refresh."""
-    status_data, err = api_client.get_status()
+    status_data, err = api_client.get_status(market=market)
 
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
@@ -157,8 +157,32 @@ def main() -> None:
     # 2. Render Live Fragment Header
     live_status_and_countdown_fragment(market=active_market)
 
-    # 3. Fetch Screening Results
-    results_data, err = api_client.get_results(market=active_market)
+    # 3. Results live in their own fragment so they re-poll the API on a timer
+    results_fragment(
+        market=active_market,
+        search_query=search_query,
+        min_rsi=slider_rsi,
+        min_vol_ratio=slider_vol,
+        max_pe=slider_pe,
+        partial_only=partial_only,
+    )
+
+
+CURRENCY = {"NSE": "₹", "NYSE": "$"}
+RESULTS_POLL_SEC = 10
+
+
+@st.fragment(run_every=RESULTS_POLL_SEC)
+def results_fragment(
+    market: str,
+    search_query: str,
+    min_rsi: float,
+    min_vol_ratio: float,
+    max_pe: float,
+    partial_only: bool,
+) -> None:
+    """Fetches and renders results; re-runs on a timer so new scans appear without interaction."""
+    results_data, err = api_client.get_results(market=market)
 
     if err:
         st.error(err)
@@ -189,9 +213,9 @@ def main() -> None:
         filtered_df = filter_results_dataframe(
             df=df,
             search_query=search_query,
-            min_rsi=slider_rsi,
-            min_vol_ratio=slider_vol,
-            max_pe=slider_pe,
+            min_rsi=min_rsi,
+            min_vol_ratio=min_vol_ratio,
+            max_pe=max_pe,
             partial_only=partial_only,
         )
 
@@ -219,7 +243,7 @@ def main() -> None:
             column_config={
                 "ticker": st.column_config.TextColumn("Ticker"),
                 "name": st.column_config.TextColumn("Company Name"),
-                "price": st.column_config.NumberColumn("Price (₹)", format="%.2f"),
+                "price": st.column_config.NumberColumn(f"Price ({CURRENCY.get(market, '')})", format="%.2f"),
                 "pe": st.column_config.NumberColumn("P/E Ratio", format="%.2f"),
                 "rsi": st.column_config.NumberColumn("RSI(14)", format="%.2f"),
                 "volume": st.column_config.NumberColumn("Latest Vol", format="%d"),
@@ -236,7 +260,7 @@ def main() -> None:
         st.download_button(
             label="📥 Export Filtered Table to CSV",
             data=csv_text,
-            file_name=f"screener_{active_market}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"screener_{market}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
         )
     else:
@@ -252,10 +276,12 @@ def main() -> None:
         c4.metric("Qualified (Passed P/E)", funnel.get("passed_pe", 0))
 
         c5, c6, c7, c8 = st.columns(4)
-        c5.metric("Filtered by RSI (<= 50)", funnel.get("filtered_rsi", 0))
-        c6.metric("Filtered by Vol (<= 2x)", funnel.get("filtered_volume", 0))
-        c7.metric("Filtered by P/E (>= 20)", funnel.get("filtered_pe", 0))
+        c5.metric("Filtered by RSI", funnel.get("filtered_rsi", 0))
+        c6.metric("Filtered by Volume", funnel.get("filtered_volume", 0))
+        c7.metric("Filtered by P/E", funnel.get("filtered_pe", 0))
         c8.metric("Data / System Failures", funnel.get("failed", 0))
+        if funnel.get("filtered_liquidity", 0):
+            st.caption(f"Also excluded by liquidity floor: {funnel['filtered_liquidity']}")
 
     # 7. Failed Symbols Expander
     if failures_list:

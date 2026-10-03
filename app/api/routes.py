@@ -60,10 +60,15 @@ async def get_results(
 
 
 @router.get("/status", response_model=StatusResponse)
-async def get_status(request: Request):
+async def get_status(
+    request: Request,
+    market: str = Query("NSE", description="Market code (default: NSE)"),
+):
     """Retrieve operational status, circuit breaker states, and staleness."""
     state_manager = request.app.state.state_manager
-    return state_manager.get_status_payload()
+    config = request.app.state.config
+    market_valid = validate_market_parameter(market, config.enabled_markets_list)
+    return state_manager.get_status_payload(market_valid)
 
 
 @router.post("/refresh", status_code=status.HTTP_202_ACCEPTED, response_model=RefreshAcceptedResponse)
@@ -76,7 +81,7 @@ async def trigger_refresh(
     config = request.app.state.config
     market_valid = validate_market_parameter(market, config.enabled_markets_list)
 
-    allowed, retry_after = scheduler.trigger_immediate_scan()
+    allowed, retry_after = scheduler.trigger_immediate_scan(market_valid)
     if not allowed:
         headers = {"Retry-After": str(retry_after or config.REFRESH_COOLDOWN_SEC)}
         raise HTTPException(

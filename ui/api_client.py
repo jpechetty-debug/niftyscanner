@@ -38,12 +38,12 @@ class ScreenerApiClient:
         except Exception as e:
             return None, f"Network error fetching results: {e}"
 
-    def get_status(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def get_status(self, market: str = "NSE") -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetch overall system status, breaker states, and staleness."""
         url = f"{self.base_url}/api/status"
         try:
             with httpx.Client(timeout=self.timeout) as client:
-                res = client.get(url)
+                res = client.get(url, params={"market": market})
                 if res.status_code == 200:
                     return res.json(), None
                 return None, f"HTTP Error {res.status_code}: {res.text}"

@@ -47,7 +47,7 @@ class StockScannerService:
 
     def run_scan(
         self, constituents: List[UniverseSymbol]
-    ) -> Tuple[List[ScanResultItem], FunnelCounts, List[FailedSymbolItem], int, float]:
+    ) -> Tuple[List[ScanResultItem], FunnelCounts, List[FailedSymbolItem], int, float, bool]:
         """Execute full screening pipeline.
 
         Returns:

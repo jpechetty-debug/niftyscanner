@@ -65,6 +65,7 @@ class Scheduler:
         self._trigger_event = asyncio.Event()
         self._post_close_done: Dict[str, Optional[str]] = {m: None for m in self.config.enabled_markets_list}
         self._task: Optional[asyncio.Task] = None
+        self._bg_tasks: set = set()
 
     async def start(self) -> None:
         """Start the background scheduler task."""
@@ -173,7 +174,9 @@ class Scheduler:
         if not allowed:
             return False, retry_after
 
-        asyncio.create_task(self.execute_scan(m))
+        task = asyncio.create_task(self.execute_scan(m))
+        self._bg_tasks.add(task)               # keep a ref so it isn't GC'd
+        task.add_done_callback(self._bg_tasks.discard)
         return True, None
 
     async def _run_loop(self) -> None:
@@ -182,7 +185,15 @@ class Scheduler:
         logger.info(f"Executing startup scans for {self.config.enabled_markets_list}...")
         for market in self.config.enabled_markets_list:
             if self.universes.get(market):
-                await self.execute_scan(market)
+                ok = await self.execute_scan(market)
+                cal = self.calendars.get(market)
+                if ok and cal and not cal.is_market_open(self.clock.now()):
+                    now = self.clock.now()
+                    local_date_str = cal.to_exchange_local(now).strftime("%Y-%m-%d")
+                    if cal.calendar.is_session(local_date_str):
+                        close_ts = cal.calendar.session_close(cal.calendar.date_to_session(local_date_str))
+                        if now >= close_ts + timedelta(minutes=self.config.MARKET_CLOSE_SCAN_DELAY_MIN):
+                            self._post_close_done[market] = local_date_str
 
         while not self._stop_event.is_set():
             now = self.clock.now()
@@ -224,8 +235,8 @@ class Scheduler:
                                 f"[{market}] Triggering scheduled post-close scan "
                                 f"({self.config.MARKET_CLOSE_SCAN_DELAY_MIN}m after close)..."
                             )
-                            await self.execute_scan(market)
-                            self._post_close_done[market] = local_date_str
+                            if await self.execute_scan(market):
+                                self._post_close_done[market] = local_date_str
 
             # Sleep 15s or until manual trigger/stop
             try:

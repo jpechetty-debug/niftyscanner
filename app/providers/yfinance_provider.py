@@ -56,6 +56,13 @@ class YFinanceProvider(MarketDataProvider):
             clock=self.clock,
         )
 
+    @staticmethod
+    def _fail_all(
+        tickers: List[str], stage: Stage, code: FailureCode, message: str
+    ) -> List[FailedSymbolItem]:
+        """One failure per affected symbol so funnel.failed reflects real symbol counts."""
+        return [FailedSymbolItem(ticker=t, stage=stage, code=code, message=message) for t in tickers]
+
     def _extract_ticker_df(self, chunk_df: pd.DataFrame, ticker: str) -> Optional[pd.DataFrame]:
         """Extract a single ticker's DataFrame handling MultiIndex and flat columns."""
         if chunk_df is None or chunk_df.empty:
@@ -88,12 +95,10 @@ class YFinanceProvider(MarketDataProvider):
         # Check circuit breaker before initiating download
         if not self.download_breaker.is_available():
             logger.error("Download circuit breaker is OPEN. Aborting price scan.")
-            failures.append(
-                FailedSymbolItem(
-                    ticker="*",
-                    stage=Stage.DOWNLOAD,
-                    code=FailureCode.CIRCUIT_OPEN,
-                    message=f"Download circuit breaker is {self.download_breaker.state.value}. Aborting scan.",
+            failures.extend(
+                self._fail_all(
+                    tickers, Stage.DOWNLOAD, FailureCode.CIRCUIT_OPEN,
+                    f"Download circuit breaker is {self.download_breaker.state.value}. Aborting scan.",
                 )
             )
             return results, 0, failures
@@ -102,15 +107,15 @@ class YFinanceProvider(MarketDataProvider):
         chunks = [tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)]
 
         for idx, chunk in enumerate(chunks):
-            # Check circuit breaker between chunks
-            if not self.download_breaker.is_available():
+            # Check circuit breaker between chunks (chunk 0 was already checked above;
+            # a second is_available() call would consume the HALF_OPEN trial and deadlock)
+            if idx > 0 and not self.download_breaker.is_available():
                 logger.error("Download circuit breaker tripped OPEN mid-scan. Aborting remaining chunks.")
-                failures.append(
-                    FailedSymbolItem(
-                        ticker="*",
-                        stage=Stage.DOWNLOAD,
-                        code=FailureCode.CIRCUIT_OPEN,
-                        message=f"Download circuit breaker opened during chunk {idx+1}/{len(chunks)}.",
+                remaining = [t for c in chunks[idx:] for t in c]
+                failures.extend(
+                    self._fail_all(
+                        remaining, Stage.DOWNLOAD, FailureCode.CIRCUIT_OPEN,
+                        f"Download circuit breaker opened during chunk {idx+1}/{len(chunks)}.",
                     )
                 )
                 break
@@ -156,12 +161,11 @@ class YFinanceProvider(MarketDataProvider):
                 self.download_breaker.record_systemic_failure(
                     f"Chunk {idx+1} failed after {self.config.MAX_RETRIES} retries: {last_err}"
                 )
-                failures.append(
-                    FailedSymbolItem(
-                        ticker="*",
-                        stage=Stage.DOWNLOAD,
-                        code=FailureCode.EMPTY_CHUNK if "Empty" in str(last_err) else FailureCode.DOWNLOAD_ERROR,
-                        message=f"Chunk {idx+1}/{len(chunks)} ({len(chunk)} symbols) failed: {last_err}",
+                failures.extend(
+                    self._fail_all(
+                        chunk, Stage.DOWNLOAD,
+                        FailureCode.EMPTY_CHUNK if "Empty" in str(last_err) else FailureCode.DOWNLOAD_ERROR,
+                        f"Chunk {idx+1}/{len(chunks)} ({len(chunk)} symbols) failed: {last_err}",
                     )
                 )
                 continue
@@ -275,12 +279,10 @@ class YFinanceProvider(MarketDataProvider):
         # 2. Check PE circuit breaker before network calls
         if not self.pe_breaker.is_available():
             logger.error("P/E circuit breaker is OPEN. Aborting fundamental fetch.")
-            failures.append(
-                FailedSymbolItem(
-                    ticker="*",
-                    stage=Stage.PE,
-                    code=FailureCode.CIRCUIT_OPEN,
-                    message=f"P/E circuit breaker is {self.pe_breaker.state.value}. Aborting P/E stage.",
+            failures.extend(
+                self._fail_all(
+                    tickers_to_fetch, Stage.PE, FailureCode.CIRCUIT_OPEN,
+                    f"P/E circuit breaker is {self.pe_breaker.state.value}. Aborting P/E stage.",
                 )
             )
             return results, 0, failures
@@ -297,6 +299,9 @@ class YFinanceProvider(MarketDataProvider):
                 if fail_code is not None:
                     if is_systemic:
                         self.pe_breaker.record_systemic_failure(fail_msg or "Systemic P/E error")
+                    else:
+                        # Endpoint responded (MISSING_PE / INVALID_PE): not a systemic fault.
+                        self.pe_breaker.record_success()
                     if fail_code == FailureCode.MISSING_PE:
                         # MISSING_PE is cached (Section 14)
                         self.pe_cache.set_missing_pe(ticker)

@@ -93,6 +93,11 @@ class MarketCalendar:
             sess = self.calendar.date_to_session(local_date_str, direction="previous")
             return sess.date()
 
+    def last_session_close(self, dt: datetime) -> datetime:
+        """UTC close time of the last expected session as of dt."""
+        sess = pd.Timestamp(self.get_last_expected_session(dt))
+        return self.calendar.session_close(sess).to_pydatetime()
+
     def sessions_behind(self, bar_date: date, current_dt: datetime) -> int:
         """Calculate how many trading sessions bar_date is behind the last expected session.
 
