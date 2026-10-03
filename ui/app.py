@@ -122,12 +122,18 @@ def apply_custom_css():
             border: 1px solid #E5E7EB;
             border-radius: 8px;
             padding: 16px;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.2s ease-in-out;
+        }
+        
+        [data-testid="stMetric"]:hover {
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
         }
         
         /* Metric value styling */
         [data-testid="stMetricValue"] {
-            color: #0D6EFD;
+            color: #212529;
             font-weight: 700;
         }
         </style>
@@ -272,6 +278,31 @@ def results_fragment(
             ]
             available_cols = [c for c in display_cols if c in filtered_df.columns]
             view_df = filtered_df[available_cols].copy()
+
+            if len(view_df) > 0:
+                st.markdown("### 🏆 Top Ranked Stock")
+                top_stock = view_df.iloc[0]
+                sc1, sc2, sc3, sc4 = st.columns(4)
+                
+                # Format price with currency
+                price_str = f"{CURRENCY.get(market, '')}{top_stock['price']:.2f}"
+                sc1.metric(f"Top Pick: {top_stock['ticker']}", price_str, f"Score: {top_stock['score']:.4f}")
+                
+                # Show RSI with trend as delta
+                rsi_trend = float(top_stock.get('rsi_trend', 0.0))
+                sc2.metric("RSI (14)", f"{top_stock['rsi']:.1f}", f"{rsi_trend:+.1f} trend", delta_color="normal")
+                
+                # Show Volume Ratio with volume as delta
+                vol_ratio = float(top_stock['volume_ratio'])
+                vol_str = f"{top_stock['volume']:,.0f} vol"
+                sc3.metric("Volume Ratio", f"{vol_ratio:.1f}x", vol_str, delta_color="normal")
+                
+                # P/E Ratio
+                pe_val = float(top_stock['pe'])
+                sc4.metric("Trailing P/E", f"{pe_val:.1f}")
+
+                st.markdown("---")
+                st.markdown("### 📋 All Qualified Stocks")
 
             st.dataframe(
                 view_df,
