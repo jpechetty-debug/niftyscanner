@@ -37,10 +37,6 @@ def apply_stage1_filters(
         tracker.filtered_rsi += 1
         return False
 
-    if config.REQUIRE_RSI_TRENDING and indicator.rsi_trend <= 0:
-        tracker.filtered_rsi_trend += 1
-        return False
-
     if not (indicator.volume_ratio > config.MIN_VOLUME_RATIO):
         tracker.filtered_volume += 1
         return False
@@ -92,9 +88,9 @@ def apply_stage2_pe_filter(
     Returns:
         True if survivor passes P/E screening filter, False otherwise.
     """
-    passed = True
+    if not (config.MIN_PE <= pe < config.MAX_PE):
+        tracker.filtered_pe += 1
+        return False
 
-    # P/E filtering is now deferred to dynamic scoring. 
-    # We always pass it to the ranking stage.
     tracker.passed_pe += 1
     return True

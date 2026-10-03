@@ -54,16 +54,19 @@ def test_stage1_exact_boundaries():
     assert tracker.filtered_volume == 0
 
 
-def test_stage2_pe_always_passes():
-    """Verify Stage 2 P/E filter always passes, deferring to scoring."""
+def test_stage2_pe_boundaries():
+    """Verify strict inequalities for Stage 2 P/E filter."""
     config = Settings(MAX_PE=20.0, MIN_PE=0.0)
 
     tracker = FunnelTracker()
-    assert apply_stage2_pe_filter(20.0, config, tracker) is True
-    assert apply_stage2_pe_filter(-5.0, config, tracker) is True
-    assert apply_stage2_pe_filter(500.0, config, tracker) is True
-    assert tracker.passed_pe == 3
-    assert tracker.filtered_pe == 0
+    assert apply_stage2_pe_filter(20.0, config, tracker) is False  # strict <
+    assert apply_stage2_pe_filter(-5.0, config, tracker) is False  # strict >= MIN_PE
+    assert apply_stage2_pe_filter(500.0, config, tracker) is False # strict < MAX_PE
+    assert tracker.passed_pe == 0
+    assert tracker.filtered_pe == 3
+
+    assert apply_stage2_pe_filter(15.0, config, tracker) is True
+    assert tracker.passed_pe == 1
 
 
 def test_evaluate_pe_value_classifications():

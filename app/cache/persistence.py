@@ -32,7 +32,6 @@ def _init_db(conn: sqlite3.Connection):
             fetched INTEGER,
             failed INTEGER,
             filtered_rsi INTEGER,
-            filtered_rsi_trend INTEGER,
             filtered_volume INTEGER,
             filtered_liquidity INTEGER,
             passed_rsi_volume INTEGER,
@@ -104,10 +103,10 @@ def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data")
         cursor.execute("""
             INSERT INTO scans (
                 market, timestamp, scan_seconds, request_count,
-                universe, fetched, failed, filtered_rsi, filtered_rsi_trend,
+                universe, fetched, failed, filtered_rsi,
                 filtered_volume, filtered_liquidity, passed_rsi_volume,
                 filtered_pe, passed_pe
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             market.upper(),
             meta.get("last_refreshed"),
@@ -117,7 +116,6 @@ def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data")
             funnel.get("fetched", 0),
             funnel.get("failed", 0),
             funnel.get("filtered_rsi", 0),
-            funnel.get("filtered_rsi_trend", 0),
             funnel.get("filtered_volume", 0),
             funnel.get("filtered_liquidity", 0),
             funnel.get("passed_rsi_volume", 0),
@@ -194,7 +192,6 @@ def load_last_scan_on_startup(market: str, data_dir: str = "data") -> Optional[D
                     "fetched": scan["fetched"],
                     "failed": scan["failed"],
                     "filtered_rsi": scan["filtered_rsi"],
-                    "filtered_rsi_trend": scan["filtered_rsi_trend"],
                     "filtered_volume": scan["filtered_volume"],
                     "filtered_liquidity": scan["filtered_liquidity"],
                     "passed_rsi_volume": scan["passed_rsi_volume"],

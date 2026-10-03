@@ -107,7 +107,7 @@ def compute_wilder_rsi(
         (rsi_value, failure_code, failure_message)
     """
     if len(close_series) < period + 1:
-        return None, FailureCode.INSUFFICIENT_HISTORY, (
+        return None, None, FailureCode.INSUFFICIENT_HISTORY, (
             f"Not enough bars ({len(close_series)}) to calculate RSI({period})"
         )
 
@@ -146,7 +146,6 @@ def compute_wilder_rsi(
 def compute_volume_metrics(
     volume_series: pd.Series,
     lookback: int = 20,
-    elapsed_fraction: float = 1.0,
 ) -> Tuple[Optional[int], Optional[float], Optional[float], Optional[FailureCode], Optional[str]]:
     """Compute latest volume, 20-day average volume, and volume ratio per Section 9.
 
@@ -198,9 +197,7 @@ def compute_volume_metrics(
             f"Calculated {lookback}-day average volume is non-positive: {avg20}"
         )
 
-    # Project the current volume to a full day equivalent if the session is partial
-    projected_volume = current_volume / elapsed_fraction
-    volume_ratio = projected_volume / avg20
+    volume_ratio = current_volume / avg20
     return current_volume, avg20, float(volume_ratio), None, None
 
 
@@ -233,11 +230,9 @@ def compute_indicators(
     latest_close = float(cleaned_df["Close"].iloc[-1])
     session_partial = calendar.is_session_partial(latest_bar_date, current_dt)
     
-    elapsed_fraction = calendar.get_session_elapsed_fraction(current_dt) if session_partial else 1.0
-
     # Volume calculation
     cur_vol, avg20, vol_ratio, vol_code, vol_msg = compute_volume_metrics(
-        cleaned_df["Volume"], lookback=volume_lookback, elapsed_fraction=elapsed_fraction
+        cleaned_df["Volume"], lookback=volume_lookback
     )
     if vol_code is not None:
         return None, vol_code, vol_msg

@@ -93,7 +93,7 @@ class JugaadProvider(MarketDataProvider):
         self, tickers: List[str]
     ) -> Tuple[Dict[str, pd.DataFrame], int, List[FailedSymbolItem]]:
         if self.download_breaker.state == CircuitState.OPEN:
-            return {}, 0, self._fail_all(tickers, Stage.DOWNLOAD, FailureCode.DOWNLOAD_FAILED, "Circuit breaker OPEN")
+            return {}, 0, self._fail_all(tickers, Stage.DOWNLOAD, FailureCode.DOWNLOAD_ERROR, "Circuit breaker OPEN")
 
         if self.download_breaker.state == CircuitState.HALF_OPEN:
             tickers = tickers[:1]
@@ -124,7 +124,7 @@ class JugaadProvider(MarketDataProvider):
                             FailedSymbolItem(
                                 ticker=ticker,
                                 stage=Stage.DOWNLOAD,
-                                code=FailureCode.DOWNLOAD_FAILED,
+                                code=FailureCode.DOWNLOAD_ERROR,
                                 message="Empty or failed download",
                             )
                         )
@@ -133,7 +133,7 @@ class JugaadProvider(MarketDataProvider):
                         FailedSymbolItem(
                             ticker=ticker,
                             stage=Stage.DOWNLOAD,
-                            code=FailureCode.DOWNLOAD_FAILED,
+                            code=FailureCode.DOWNLOAD_ERROR,
                             message=str(e),
                         )
                     )
@@ -141,7 +141,7 @@ class JugaadProvider(MarketDataProvider):
         self.total_requests += requests
         
         if len(failures) == len(tickers) and len(tickers) > 0:
-            self.download_breaker.record_failure()
+            self.download_breaker.record_systemic_failure()
         else:
             self.download_breaker.record_success()
 
@@ -151,7 +151,7 @@ class JugaadProvider(MarketDataProvider):
         self, tickers: List[str]
     ) -> Tuple[Dict[str, float], int, List[FailedSymbolItem]]:
         if self.pe_breaker.state == CircuitState.OPEN:
-            return {}, 0, self._fail_all(tickers, Stage.PE_FETCH, FailureCode.PE_FETCH_FAILED, "PE Circuit breaker OPEN")
+            return {}, 0, self._fail_all(tickers, Stage.PE, FailureCode.PE_FETCH_FAILED, "PE Circuit breaker OPEN")
 
         if self.pe_breaker.state == CircuitState.HALF_OPEN:
             tickers = tickers[:1]
@@ -179,8 +179,6 @@ class JugaadProvider(MarketDataProvider):
                 if not info:
                     return ticker, None, "Empty info"
                 pe = info.get("trailingPE")
-                if pe is None:
-                    pe = info.get("forwardPE")
                 if pe is not None:
                     return ticker, float(pe), None
                 return ticker, None, "No PE found"
@@ -198,7 +196,7 @@ class JugaadProvider(MarketDataProvider):
                 else:
                     code = FailureCode.PE_FETCH_FAILED if err != "No PE found" else FailureCode.MISSING_PE
                     failures.append(
-                        FailedSymbolItem(ticker=t, stage=Stage.PE_FETCH, code=code, message=err or "Unknown")
+                        FailedSymbolItem(ticker=t, stage=Stage.PE, code=code, message=err or "Unknown")
                     )
 
         self.total_requests += requests
@@ -206,7 +204,7 @@ class JugaadProvider(MarketDataProvider):
         # If all missing failed with a fetch error (not just missing PE), breaker trip
         fetch_errors = [f for f in failures if f.code == FailureCode.PE_FETCH_FAILED]
         if missing and len(fetch_errors) == len(missing):
-            self.pe_breaker.record_failure()
+            self.pe_breaker.record_systemic_failure()
         else:
             self.pe_breaker.record_success()
 

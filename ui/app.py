@@ -268,7 +268,6 @@ def results_fragment(
                 "price",
                 "pe",
                 "rsi",
-                "rsi_trend",
                 "volume",
                 "avg_volume_20d",
                 "volume_ratio",
@@ -288,9 +287,8 @@ def results_fragment(
                 price_str = f"{CURRENCY.get(market, '')}{top_stock['price']:.2f}"
                 sc1.metric(f"Top Pick: {top_stock['ticker']}", price_str, f"Score: {top_stock['score']:.4f}")
                 
-                # Show RSI with trend as delta
-                rsi_trend = float(top_stock.get('rsi_trend', 0.0))
-                sc2.metric("RSI (14)", f"{top_stock['rsi']:.1f}", f"{rsi_trend:+.1f} trend", delta_color="normal")
+                # Show RSI
+                sc2.metric("RSI (14)", f"{top_stock['rsi']:.1f}")
                 
                 # Show Volume Ratio with volume as delta
                 vol_ratio = float(top_stock['volume_ratio'])
@@ -314,7 +312,6 @@ def results_fragment(
                     "price": st.column_config.NumberColumn(f"Price ({CURRENCY.get(market, '')})", format="%.2f"),
                     "pe": st.column_config.NumberColumn("P/E Ratio", format="%.2f"),
                     "rsi": st.column_config.ProgressColumn("RSI(14)", format="%.2f", min_value=0, max_value=100),
-                    "rsi_trend": st.column_config.NumberColumn("RSI Trend", format="%+.2f"),
                     "volume": st.column_config.NumberColumn("Latest Vol", format="%d"),
                     "avg_volume_20d": st.column_config.NumberColumn("20d Avg Vol", format="%.0f"),
                     "volume_ratio": st.column_config.NumberColumn("Vol Ratio", format="%.2fx"),
@@ -385,8 +382,6 @@ def results_fragment(
         c6.metric("Filtered by Volume", funnel.get("filtered_volume", 0))
         c7.metric("Filtered by P/E", funnel.get("filtered_pe", 0))
         c8.metric("Data / System Failures", funnel.get("failed", 0))
-        if funnel.get("filtered_rsi_trend", 0):
-            st.caption(f"Also excluded by RSI trend filter: {funnel['filtered_rsi_trend']}")
         if funnel.get("filtered_liquidity", 0):
             st.caption(f"Also excluded by liquidity floor: {funnel['filtered_liquidity']}")
 
