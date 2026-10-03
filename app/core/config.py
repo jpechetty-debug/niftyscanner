@@ -61,14 +61,15 @@ class Settings(BaseSettings):
 
     # Technical & Fundamental Filters
     RSI_PERIOD: int = 14
-    MIN_RSI: float = 50.0
+    MIN_RSI: float = 40.0
     RSI_CAP: float = 80.0
-    MIN_VOLUME_RATIO: float = 2.0
+    REQUIRE_RSI_TREND_UP: bool = True
+    MIN_VOLUME_RATIO: float = 1.5
     VOLUME_RATIO_CAP: float = 10.0
     VOLUME_LOOKBACK: int = 20
     MIN_AVG_VOLUME: float = 0.0
-    MAX_PE: float = 20.0
-    MIN_PE: float = 0.0
+    MAX_PE: float = 50.0
+    MIN_PE: float = -500.0
     MIN_BARS: int = 60
     MAX_BAR_AGE_SESSIONS: int = 2
 
@@ -110,9 +111,9 @@ class Settings(BaseSettings):
                 f"MIN_VOLUME_RATIO ({self.MIN_VOLUME_RATIO})"
             )
 
-        if not (self.MAX_PE > self.MIN_PE >= 0):
+        if not (self.MAX_PE > self.MIN_PE):
             raise ValueError(
-                f"P/E thresholds must satisfy MAX_PE > MIN_PE >= 0, "
+                f"P/E thresholds must satisfy MAX_PE > MIN_PE, "
                 f"got MAX_PE={self.MAX_PE}, MIN_PE={self.MIN_PE}"
             )
 

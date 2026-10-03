@@ -30,17 +30,17 @@ def test_composite_score_and_clipping():
     # 2. Values at or exceeding caps (clipping check):
     # vol_ratio=15.0 -> V clips to 1.0
     # rsi=95.0 -> R clips to 1.0
-    # pe=0.0 -> P = (20-0)/20 = 1.0
+    # pe=10.0 -> P = 10.0/10.0 = 1.0
     # Score = 0.40*1 + 0.35*1 + 0.25*1 = 1.0
-    score_max = calculate_composite_score(volume_ratio=15.0, rsi=95.0, pe=0.0, config=config)
+    score_max = calculate_composite_score(volume_ratio=15.0, rsi=95.0, pe=10.0, config=config)
     assert score_max == 1.0
 
     # 3. Intermediate check:
     # vol_ratio = 6.0 -> V = (6 - 2)/8 = 0.5
     # rsi = 65.0 -> R = (65 - 50)/30 = 0.5
-    # pe = 10.0 -> P = (20 - 10)/20 = 0.5
+    # pe = 15.0 -> P = (20 - 15) / (20 - 10) = 0.5
     # Score = 0.40*0.5 + 0.35*0.5 + 0.25*0.5 = 0.5
-    score_mid = calculate_composite_score(volume_ratio=6.0, rsi=65.0, pe=10.0, config=config)
+    score_mid = calculate_composite_score(volume_ratio=6.0, rsi=65.0, pe=15.0, config=config)
     assert pytest.approx(score_mid, abs=1e-6) == 0.5
 
 

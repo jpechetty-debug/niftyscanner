@@ -134,7 +134,7 @@ def test_symbol_failing_rsi_and_volume_is_counted_once():
     from app.core.indicators import IndicatorResult
     from app.core.outcomes import FunnelTracker
 
-    ind = IndicatorResult(date(2026, 10, 1), 100.0, rsi=30.0, volume=1, avg_volume_20d=1.0,
+    ind = IndicatorResult(date(2026, 10, 1), 100.0, rsi=30.0, rsi_1d=20.0, volume=1, avg_volume_20d=1.0,
                           volume_ratio=1.0, session_partial=False)
     t = FunnelTracker()
     assert apply_stage1_filters(ind, Settings(), t) is False
@@ -147,7 +147,7 @@ def test_min_avg_volume_rejection_is_counted():
     from app.core.indicators import IndicatorResult
     from app.core.outcomes import FunnelTracker
 
-    ind = IndicatorResult(date(2026, 10, 1), 100.0, rsi=60.0, volume=500, avg_volume_20d=100.0,
+    ind = IndicatorResult(date(2026, 10, 1), 100.0, rsi=60.0, rsi_1d=50.0, volume=500, avg_volume_20d=100.0,
                           volume_ratio=5.0, session_partial=False)
     t = FunnelTracker()
     assert apply_stage1_filters(ind, Settings(MIN_AVG_VOLUME=1000), t) is False

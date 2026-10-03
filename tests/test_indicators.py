@@ -45,7 +45,7 @@ def test_rsi_matches_independent_reference_long_series():
     returns = np.random.normal(0.001, 0.02, n)
     prices = pd.Series(100.0 * np.exp(np.cumsum(returns)))
 
-    rsi_calc, code, msg = compute_wilder_rsi(prices, period=14)
+    rsi_calc, rsi_1d, code, msg = compute_wilder_rsi(prices, period=14)
     assert code is None
     assert rsi_calc is not None
 
@@ -57,13 +57,13 @@ def test_rsi_flat_series_and_ordering():
     """Flat series must return FLAT_SERIES and take precedence before avg_loss == 0 check."""
     # Series with no price movement
     flat_prices = pd.Series([100.0] * 50)
-    rsi_val, code, msg = compute_wilder_rsi(flat_prices, period=14)
+    rsi_val, rsi_1d, code, msg = compute_wilder_rsi(flat_prices, period=14)
     assert rsi_val is None
     assert code == FailureCode.FLAT_SERIES
 
     # Monotonically increasing series: avg_loss == 0 -> RSI = 100.0
     rising_prices = pd.Series([100.0 + i * 2.0 for i in range(50)])
-    rsi_val, code, msg = compute_wilder_rsi(rising_prices, period=14)
+    rsi_val, rsi_1d, code, msg = compute_wilder_rsi(rising_prices, period=14)
     assert code is None
     assert rsi_val == 100.0
 

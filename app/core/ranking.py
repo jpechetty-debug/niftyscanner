@@ -18,7 +18,7 @@ def calculate_composite_score(
     Formula:
     V = (volume_ratio - MIN_VOLUME_RATIO) / (VOLUME_RATIO_CAP - MIN_VOLUME_RATIO)
     R = (RSI - MIN_RSI) / (RSI_CAP - MIN_RSI)
-    P = (MAX_PE - PE) / MAX_PE
+    P = dynamic piecewise function punishing <=0 or >=MAX_PE and peaking at P/E=10
 
     All components are clipped to [0.0, 1.0].
     Score = W_V * V + W_R * R + W_P * P
@@ -29,8 +29,14 @@ def calculate_composite_score(
     r_raw = (rsi - config.MIN_RSI) / (config.RSI_CAP - config.MIN_RSI)
     r_clip = min(max(r_raw, 0.0), 1.0)
 
-    p_raw = (config.MAX_PE - pe) / config.MAX_PE
-    p_clip = min(max(p_raw, 0.0), 1.0)
+    p_clip = 0.0
+    if pe > 0 and pe < config.MAX_PE:
+        optimal_pe = 10.0
+        if pe <= optimal_pe:
+            p_clip = pe / optimal_pe
+        else:
+            p_clip = (config.MAX_PE - pe) / (config.MAX_PE - optimal_pe)
+    p_clip = min(max(p_clip, 0.0), 1.0)
 
     score = (
         config.WEIGHT_VOLUME * v_clip

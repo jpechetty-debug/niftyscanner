@@ -18,6 +18,7 @@ class IndicatorResult:
     bar_date: date
     price: float
     rsi: float
+    rsi_1d: float
     volume: int
     avg_volume_20d: float
     volume_ratio: float
@@ -94,7 +95,7 @@ def clean_and_validate_bars(
 def compute_wilder_rsi(
     close_series: pd.Series,
     period: int = 14,
-) -> Tuple[Optional[float], Optional[FailureCode], Optional[str]]:
+) -> Tuple[Optional[float], Optional[float], Optional[FailureCode], Optional[str]]:
     """Compute Wilder's RSI using ewm(alpha=1/period, adjust=False).
 
     Check order per Section 9:
@@ -103,10 +104,10 @@ def compute_wilder_rsi(
     3. Normal formula: 100 - (100 / (1 + RS)).
 
     Returns:
-        (rsi_value, failure_code, failure_message)
+        (rsi_value, rsi_1d, failure_code, failure_message)
     """
     if len(close_series) < period + 1:
-        return None, FailureCode.INSUFFICIENT_HISTORY, (
+        return None, None, FailureCode.INSUFFICIENT_HISTORY, (
             f"Not enough bars ({len(close_series)}) to calculate RSI({period})"
         )
 
@@ -125,18 +126,20 @@ def compute_wilder_rsi(
 
     # Check 1: Flat series first (no price change or both zero)
     if (latest_gain == 0.0 and latest_loss == 0.0) or (close_series.nunique() <= 1):
-        return None, FailureCode.FLAT_SERIES, "Price series is completely flat with zero movement"
+        return None, None, FailureCode.FLAT_SERIES, "Price series is completely flat with zero movement"
 
     # Check 2: avg_loss == 0 -> RSI = 100.0
     if latest_loss == 0.0:
-        return 100.0, None, None
+        return 100.0, 100.0, None, None
 
     # Calculate full series to get the trend
     rs_series = avg_gain / avg_loss
     rsi_series = 100.0 - (100.0 / (1.0 + rs_series))
     
     rsi = float(rsi_series.iloc[-1])
-    return rsi, None, None
+    rsi_1d = float(rsi_series.iloc[-2]) if len(rsi_series) > 1 else rsi
+    return rsi, rsi_1d, None, None
+
 
 
 def compute_volume_metrics(
@@ -223,7 +226,7 @@ def compute_indicators(
         return None, fail_code, fail_msg
 
     # RSI calculation
-    rsi, rsi_code, rsi_msg = compute_wilder_rsi(cleaned_df["Close"], period=rsi_period)
+    rsi, rsi_1d, rsi_code, rsi_msg = compute_wilder_rsi(cleaned_df["Close"], period=rsi_period)
     if rsi_code is not None:
         return None, rsi_code, rsi_msg
 
@@ -244,6 +247,7 @@ def compute_indicators(
             bar_date=latest_bar_date,
             price=latest_close,
             rsi=rsi,
+            rsi_1d=rsi_1d,
             volume=cur_vol,
             avg_volume_20d=avg20,
             volume_ratio=vol_ratio,

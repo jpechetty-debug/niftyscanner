@@ -14,11 +14,11 @@ from app.core.outcomes import FailureCode, FunnelTracker
 
 
 def make_dummy_indicator(rsi: float, vol_ratio: float, avg20: float = 100_000.0) -> IndicatorResult:
-    """Helper to construct an IndicatorResult for filter testing."""
     return IndicatorResult(
         bar_date=date(2026, 10, 1),
         price=150.0,
         rsi=rsi,
+        rsi_1d=rsi - 5.0, # By default, trend up
         volume=int(avg20 * vol_ratio),
         avg_volume_20d=avg20,
         volume_ratio=vol_ratio,
@@ -80,14 +80,14 @@ def test_evaluate_pe_value_classifications():
     assert val is None
     assert code == FailureCode.INVALID_PE
 
-    # Non-positive (<= 0) are now INVALID_PE
+    # Non-positive (<= 0) are now valid floats
     val, code, _ = evaluate_pe_value(0.0)
-    assert val is None
-    assert code == FailureCode.INVALID_PE
+    assert val == 0.0
+    assert code is None
 
     val, code, _ = evaluate_pe_value(-5.0)
-    assert val is None
-    assert code == FailureCode.INVALID_PE
+    assert val == -5.0
+    assert code is None
 
     # NaN / Inf
     val, code, _ = evaluate_pe_value(float("nan"))

@@ -11,12 +11,12 @@ def test_default_config_valid():
     settings = Settings()
     assert settings.API_HOST == "127.0.0.1"
     assert settings.REFRESH_INTERVAL_SEC == 60
-    assert settings.MIN_RSI == 50.0
+    assert settings.MIN_RSI == 40.0
     assert settings.RSI_CAP == 80.0
-    assert settings.MIN_VOLUME_RATIO == 2.0
+    assert settings.MIN_VOLUME_RATIO == 1.5
     assert settings.VOLUME_RATIO_CAP == 10.0
-    assert settings.MAX_PE == 20.0
-    assert settings.MIN_PE == 0.0
+    assert settings.MAX_PE == 50.0
+    assert settings.MIN_PE == -500.0
     assert settings.MIN_BARS == 60
     assert settings.VOLUME_LOOKBACK == 20
 
@@ -54,12 +54,9 @@ def test_volume_ratio_cap_greater_than_min():
 
 
 def test_pe_bounds_validation():
-    """MAX_PE > MIN_PE >= 0."""
-    with pytest.raises(ValidationError, match="MAX_PE > MIN_PE >= 0"):
+    """MAX_PE > MIN_PE."""
+    with pytest.raises(ValidationError, match="MAX_PE > MIN_PE"):
         Settings(MAX_PE=10.0, MIN_PE=15.0)
-
-    with pytest.raises(ValidationError, match="MAX_PE > MIN_PE >= 0"):
-        Settings(MAX_PE=10.0, MIN_PE=-1.0)
 
 
 def test_min_bars_greater_than_lookback():

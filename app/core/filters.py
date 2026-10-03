@@ -37,6 +37,10 @@ def apply_stage1_filters(
         tracker.filtered_rsi += 1
         return False
 
+    if config.REQUIRE_RSI_TREND_UP and not (indicator.rsi >= indicator.rsi_1d):
+        tracker.filtered_rsi += 1
+        return False
+
     if not (indicator.volume_ratio > config.MIN_VOLUME_RATIO):
         tracker.filtered_volume += 1
         return False
@@ -56,8 +60,8 @@ def evaluate_pe_value(
 
     Rules:
     - None / absent -> MISSING_PE
-    - NaN / inf / non-numeric / <= 0 -> INVALID_PE
-    - valid positive float -> (pe, None, None)
+    - NaN / inf / non-numeric -> INVALID_PE
+    - valid float -> (pe, None, None)
     """
     if pe_raw is None:
         return None, FailureCode.MISSING_PE, "Trailing P/E ratio is missing or not provided"
@@ -67,8 +71,8 @@ def evaluate_pe_value(
     except (ValueError, TypeError):
         return None, FailureCode.INVALID_PE, f"Trailing P/E is non-numeric: {pe_raw}"
 
-    if math.isnan(pe) or math.isinf(pe) or pe <= 0:
-        return None, FailureCode.INVALID_PE, f"Trailing P/E has invalid non-numeric, infinite, or non-positive value: {pe}"
+    if math.isnan(pe) or math.isinf(pe):
+        return None, FailureCode.INVALID_PE, f"Trailing P/E has invalid non-numeric or infinite value: {pe}"
 
     return pe, None, None
 
