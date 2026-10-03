@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     VOLUME_RATIO_CAP: float = 10.0
     VOLUME_LOOKBACK: int = 20
     MIN_AVG_VOLUME: float = 0.0
+    MIN_VOLUME_PROJECTION_ELAPSED: float = 0.25
     MAX_PE: float = 50.0
     MIN_PE: float = -500.0
     MIN_BARS: int = 60

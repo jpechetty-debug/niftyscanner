@@ -146,6 +146,7 @@ def compute_volume_metrics(
     volume_series: pd.Series,
     lookback: int = 20,
     elapsed_fraction: float = 1.0,
+    min_elapsed_fraction: float = 0.25,
 ) -> Tuple[Optional[int], Optional[float], Optional[float], Optional[FailureCode], Optional[str]]:
     """Compute latest volume, 20-day average volume, and volume ratio per Section 9.
 
@@ -199,7 +200,7 @@ def compute_volume_metrics(
 
     projected_volume = current_volume
     if elapsed_fraction > 0 and elapsed_fraction < 1.0:
-        elapsed_fraction = max(elapsed_fraction, 0.25)
+        elapsed_fraction = max(elapsed_fraction, min_elapsed_fraction)
         projected_volume = current_volume / elapsed_fraction
 
     volume_ratio = projected_volume / avg20
@@ -214,6 +215,7 @@ def compute_indicators(
     volume_lookback: int = 20,
     min_bars: int = 60,
     max_bar_age_sessions: int = 2,
+    min_volume_projection_elapsed: float = 0.25,
 ) -> Tuple[Optional[IndicatorResult], Optional[FailureCode], Optional[str]]:
     """Clean data and calculate RSI, Volume Ratio, and session partial flag."""
     cleaned_df, fail_code, fail_msg = clean_and_validate_bars(
@@ -238,7 +240,10 @@ def compute_indicators(
     
     # Volume calculation
     cur_vol, avg20, vol_ratio, vol_code, vol_msg = compute_volume_metrics(
-        cleaned_df["Volume"], lookback=volume_lookback, elapsed_fraction=elapsed_fraction
+        cleaned_df["Volume"],
+        lookback=volume_lookback,
+        elapsed_fraction=elapsed_fraction,
+        min_elapsed_fraction=min_volume_projection_elapsed,
     )
     if vol_code is not None:
         return None, vol_code, vol_msg

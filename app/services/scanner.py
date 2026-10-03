@@ -91,6 +91,7 @@ class StockScannerService:
                 volume_lookback=self.config.VOLUME_LOOKBACK,
                 min_bars=self.config.MIN_BARS,
                 max_bar_age_sessions=self.config.MAX_BAR_AGE_SESSIONS,
+                min_volume_projection_elapsed=self.config.MIN_VOLUME_PROJECTION_ELAPSED,
             )
 
             if fail_code is not None:

@@ -292,7 +292,9 @@ def results_fragment(
                 
                 # Show Volume Ratio with volume as delta
                 vol_ratio = float(top_stock['volume_ratio'])
-                vol_str = f"{top_stock['volume']:,.0f} vol"
+                is_partial = bool(top_stock.get('session_partial', False))
+                partial_note = " (partial)" if is_partial else ""
+                vol_str = f"{top_stock['volume']:,.0f} vol{partial_note}"
                 sc3.metric("Volume Ratio", f"{vol_ratio:.1f}x", vol_str, delta_color="normal")
                 
                 # P/E Ratio
@@ -312,9 +314,17 @@ def results_fragment(
                     "price": st.column_config.NumberColumn(f"Price ({CURRENCY.get(market, '')})", format="%.2f"),
                     "pe": st.column_config.NumberColumn("P/E Ratio", format="%.2f"),
                     "rsi": st.column_config.ProgressColumn("RSI(14)", format="%.2f", min_value=0, max_value=100),
-                    "volume": st.column_config.NumberColumn("Latest Vol", format="%d"),
+                    "volume": st.column_config.NumberColumn(
+                        "Latest Vol",
+                        format="%d",
+                        help="Raw latest volume. Note: during market hours, volume is partial while Vol Ratio is projected to full session.",
+                    ),
                     "avg_volume_20d": st.column_config.NumberColumn("20d Avg Vol", format="%.0f"),
-                    "volume_ratio": st.column_config.NumberColumn("Vol Ratio", format="%.2fx"),
+                    "volume_ratio": st.column_config.NumberColumn(
+                        "Vol Ratio",
+                        format="%.2fx",
+                        help="Volume ratio relative to 20-day average. Projected to full-session during market hours.",
+                    ),
                     "score": st.column_config.NumberColumn("Rank Score", format="%.4f"),
                     "session_partial": st.column_config.CheckboxColumn("Partial"),
                     "bar_date": st.column_config.DateColumn("Bar Date"),

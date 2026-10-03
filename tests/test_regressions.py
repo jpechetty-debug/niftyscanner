@@ -246,3 +246,25 @@ def test_requirements_cover_imports_and_are_utf8():
     text = raw.decode("utf-8").lower()
     for pkg in ("plotly", "exchange_calendars", "streamlit", "yfinance"):
         assert pkg in text, pkg
+
+
+def test_scan_during_market_hours_does_not_crash():
+    """Partial-session path needs MarketCalendar.get_session_elapsed_fraction (was deleted once)."""
+    from app.providers.fake_provider import FakeProvider
+    from app.services.scanner import StockScannerService
+    from tests.fixtures.synthetic_data import SYNTHETIC_UNIVERSE
+
+    open_dt = datetime(2026, 10, 1, 6, 0, tzinfo=timezone.utc)  # Thu 11:30 IST
+    cal = MarketCalendar("NSE")
+    assert cal.is_market_open(open_dt)
+    svc = StockScannerService(Settings(), FakeProvider(print_banner=False), cal, FakeClock(open_dt))
+    _, funnel, failures, *_ = svc.run_scan(SYNTHETIC_UNIVERSE)
+    assert funnel.universe == len(SYNTHETIC_UNIVERSE)
+
+
+def test_session_elapsed_fraction_bounds():
+    cal = MarketCalendar("NSE")
+    assert cal.get_session_elapsed_fraction(datetime(2026, 10, 1, 10, 30, tzinfo=timezone.utc)) == 1.0  # closed
+    mid = cal.get_session_elapsed_fraction(datetime(2026, 10, 1, 6, 52, 30, tzinfo=timezone.utc))      # ~half-way
+    assert 0.45 < mid < 0.55
+    assert 0.0 < cal.get_session_elapsed_fraction(datetime(2026, 10, 1, 3, 46, tzinfo=timezone.utc)) <= 0.02
