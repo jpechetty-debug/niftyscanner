@@ -199,6 +199,7 @@ def compute_volume_metrics(
 
     projected_volume = current_volume
     if elapsed_fraction > 0 and elapsed_fraction < 1.0:
+        elapsed_fraction = max(elapsed_fraction, 0.25)
         projected_volume = current_volume / elapsed_fraction
 
     volume_ratio = projected_volume / avg20

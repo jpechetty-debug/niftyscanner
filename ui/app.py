@@ -147,7 +147,7 @@ def main() -> None:
     apply_custom_css()
     st.title("⚡ Quantitative Stock Screener")
     st.caption(
-        "Screening criteria: **RSI(14) > 50**, **Volume > 2x 20-day Average**, **Trailing P/E < 20**. "
+        "Screening criteria are set by the backend (`MIN_RSI`, `MIN_VOLUME_RATIO`, `MIN_PE`/`MAX_PE`); sliders below only narrow the results. "
         "Notice: Market data is provided by yfinance. Data is delayed and not real-time."
     )
 

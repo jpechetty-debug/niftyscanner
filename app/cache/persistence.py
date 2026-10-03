@@ -144,6 +144,10 @@ def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data")
                 VALUES (?, ?, ?, ?, ?)
             """, (scan_id, f.get("ticker"), f.get("stage"), f.get("code"), f.get("message")))
             
+        cursor.execute(
+            "DELETE FROM failures WHERE scan_id IN (SELECT id FROM scans WHERE market = ? AND id <> ?)",
+            (market.upper(), scan_id),
+        )
         conn.commit()
         logger.info(f"Persisted scan results for {market} to SQLite database.")
         return Path(data_dir) / "history.db"

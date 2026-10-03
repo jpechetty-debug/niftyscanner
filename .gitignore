@@ -30,3 +30,7 @@ Thumbs.db
 
 # CodeGraph
 .codegraph/
+
+data/history.db
+data/*.db
+scratch_*.py

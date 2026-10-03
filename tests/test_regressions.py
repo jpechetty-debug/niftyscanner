@@ -175,3 +175,74 @@ def test_ui_results_section_is_an_auto_refreshing_fragment():
     assert "fragment" in deco and "run_every" in deco
     main_src = ast.unparse(next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main"))
     assert "get_results" not in main_src  # results must be fetched inside the fragment, not once per rerun
+
+import pandas as pd
+import numpy as np
+
+# --------------------------------------------------------------------------
+# Calendar / bar cache / dependencies
+# --------------------------------------------------------------------------
+def test_nse_calendar_knows_weekday_holidays():
+    from app.market.calendar import MarketCalendar
+    cal = MarketCalendar("NSE")
+    # Republic Day (Mon 2026-01-26) and Gandhi Jayanti (Fri 2026-10-02) are exchange holidays
+    for d in (datetime(2026, 1, 26, 6, 0, tzinfo=timezone.utc), datetime(2026, 10, 2, 6, 0, tzinfo=timezone.utc)):
+        assert cal.is_market_open(d) is False
+        assert cal.get_market_status(d).is_holiday is True
+
+
+def _bars(closes, start="2026-09-01"):
+    idx = pd.bdate_range(start, periods=len(closes))
+    return pd.DataFrame({"Close": closes, "Volume": 1000}, index=idx)
+
+
+def test_bar_cache_flags_retroactive_price_adjustment():
+    from app.cache.bar_cache import BarCache
+
+    cache = BarCache()
+    base = _bars([100.0, 101.0, 102.0, 103.0, 104.0, 105.0])
+    cache.set_bars("A.NS", base)
+
+    same = base.tail(3).copy()
+    same.iloc[-1, same.columns.get_loc("Close")] = 106.0  # newest bar still moving intraday: ignored
+    assert cache.is_consistent("A.NS", same) is True
+
+    adjusted = base.tail(3).copy()
+    adjusted["Close"] = adjusted["Close"] * 0.5  # 2:1 split rewrote history
+    assert cache.is_consistent("A.NS", adjusted) is False
+
+
+def test_provider_refetches_full_history_after_adjustment(monkeypatch):
+    from app.providers.yfinance_provider import YFinanceProvider
+    import app.providers.yfinance_provider as yp
+    from app.market.clock import FakeClock
+    from app.core.config import Settings
+    cfg = Settings(CHUNK_DELAY_MIN_SEC=0, CHUNK_DELAY_MAX_SEC=0)
+    prov = YFinanceProvider(cfg, clock=FakeClock())
+    old = _bars(list(np.linspace(100, 120, 70)), start="2026-06-01")
+    prov.bar_cache.set_bars("A.NS", old)
+    calls = []
+
+    def fake_download(tickers, period, **kw):
+        calls.append(period)
+        halved = old.copy()
+        halved["Close"] = halved["Close"] * 0.5  # adjusted history
+        df = halved.tail(5) if period == "5d" else halved
+        df.columns = pd.MultiIndex.from_product([df.columns, tickers])
+        return df
+
+    monkeypatch.setattr(yp.yf, "download", fake_download)
+    res, _, fails = prov.download_bars(["A.NS"])
+    assert not fails and "6mo" in calls and "5d" in calls
+    assert len(res["A.NS"]) == 70
+    assert abs(res["A.NS"]["Close"].iloc[0] - 50.0) < 1e-6  # full adjusted history, no splice jump
+
+
+def test_requirements_cover_imports_and_are_utf8():
+    from pathlib import Path
+
+    raw = Path("requirements.txt").read_bytes()
+    assert b"\x00" not in raw  # no UTF-16 fragments
+    text = raw.decode("utf-8").lower()
+    for pkg in ("plotly", "exchange_calendars", "streamlit", "yfinance"):
+        assert pkg in text, pkg

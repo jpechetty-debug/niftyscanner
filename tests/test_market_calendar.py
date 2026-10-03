@@ -37,8 +37,8 @@ def test_calendar_timezone_and_open_status():
     pre_dt = datetime(2026, 10, 1, 8, 0, tzinfo=tz).astimezone(timezone.utc)
     assert calendar.is_market_open(pre_dt) is False
 
-    # Oct 4, 2026 (Sunday)
-    holiday_dt = datetime(2026, 10, 4, 12, 0, tzinfo=tz).astimezone(timezone.utc)
+    # Oct 2, 2026 (Gandhi Jayanti, a weekday exchange holiday)
+    holiday_dt = datetime(2026, 10, 2, 12, 0, tzinfo=tz).astimezone(timezone.utc)
     assert calendar.is_market_open(holiday_dt) is False
     status_holiday = calendar.get_market_status(holiday_dt)
     assert status_holiday.is_holiday is True

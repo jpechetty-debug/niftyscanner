@@ -155,7 +155,7 @@ class YFinanceProvider(MarketDataProvider):
                     if needs_full:
                         chunk_df_full = yf.download(
                             tickers=needs_full,
-                            period="3mo",
+                            period="6mo",
                             interval="1d",
                             auto_adjust=True,
                             threads=self.config.DOWNLOAD_THREADS,
@@ -235,6 +235,21 @@ class YFinanceProvider(MarketDataProvider):
                         )
                     )
                 else:
+                    if ticker in needs_delta and not self.bar_cache.is_consistent(ticker, ticker_df):
+                        # History was retroactively adjusted (split/dividend): re-pull full history.
+                        logger.info(f"{ticker}: price adjustment detected, refetching full history")
+                        self.bar_cache.invalidate(ticker)
+                        try:
+                            request_count += 1
+                            full = yf.download(
+                                tickers=[ticker], period="6mo", interval="1d",
+                                auto_adjust=True, progress=False,
+                            )
+                            refetched = self._extract_ticker_df(full, ticker)
+                            if refetched is not None and not refetched.empty:
+                                ticker_df = refetched
+                        except Exception as e:
+                            logger.warning(f"{ticker}: full refetch failed: {e}")
                     ticker_df = self.bar_cache.update_bars(ticker, ticker_df)
                     results[ticker] = ticker_df
 
