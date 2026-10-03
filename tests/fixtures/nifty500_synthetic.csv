@@ -1,0 +1,12 @@
+# SYNTHETIC DATA - NOT REAL MARKET CONSTITUENTS
+Company Name,Industry,Symbol,Series,ISIN Code
+Synthetic Alpha Inc,Technology,TEST1,EQ,SYNTH0000001
+Synthetic Beta Ltd,Finance,TEST2,EQ,SYNTH0000002
+Synthetic Gamma Corp,Healthcare,TEST3,EQ,SYNTH0000003
+Synthetic Delta Energy,Energy,TEST4,EQ,SYNTH0000004
+Synthetic Epsilon Consumer,Consumer,TEST5,EQ,SYNTH0000005
+Synthetic Zeta Materials,Materials,TEST6,EQ,SYNTH0000006
+Synthetic Eta Industrials,Industrials,TEST7,EQ,SYNTH0000007
+Synthetic Theta Utilities,Utilities,TEST8,EQ,SYNTH0000008
+Synthetic Iota Telecom,Telecom,TEST9,EQ,SYNTH0000009
+Synthetic Kappa RealEstate,RealEstate,TEST10,EQ,SYNTH0000010
