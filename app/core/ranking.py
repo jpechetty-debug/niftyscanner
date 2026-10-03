@@ -29,23 +29,8 @@ def calculate_composite_score(
     r_raw = (rsi - config.MIN_RSI) / (config.RSI_CAP - config.MIN_RSI)
     r_clip = min(max(r_raw, 0.0), 1.0)
 
-    # Dynamic P/E scoring
-    if pe <= 0:
-        # Heavily punish negative earnings (loss-making)
-        p_clip = 0.0
-    elif pe <= config.MAX_PE:
-        # e.g., if MAX_PE = 20, PE = 10 gets (20-10)/20 = 0.5.
-        p_raw = (config.MAX_PE - pe) / config.MAX_PE
-        p_clip = min(max(p_raw, 0.0), 1.0)
-    else:
-        # Dynamically punish extremely high P/E (exponential/inverse decay)
-        # If PE = 40 and MAX_PE = 20, 20/40 = 0.5. But we want a penalty, 
-        # so maybe negative score or just very close to 0. 
-        # We can map it smoothly below 0 if we want it to drag down overall score, 
-        # but the request is to "punish more dynamically". Let's give it a slightly negative weight 
-        # or just 0 so it doesn't contribute. Let's make it a penalty:
-        penalty = (pe - config.MAX_PE) / config.MAX_PE
-        p_clip = max(-1.0, -0.5 * penalty) # caps at -1.0
+    p_raw = (config.MAX_PE - pe) / config.MAX_PE
+    p_clip = min(max(p_raw, 0.0), 1.0)
 
     score = (
         config.WEIGHT_VOLUME * v_clip

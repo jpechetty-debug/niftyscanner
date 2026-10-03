@@ -27,14 +27,20 @@ async def test_scheduler_single_flight_and_cooldown():
     scanner = StockScannerService(config=config, provider=provider, calendar=calendar, clock=clock)
     cb_down = CircuitBreaker("d", clock=clock)
     cb_pe = CircuitBreaker("p", clock=clock)
-    state = ScanStateManager(config=config, download_breaker=cb_down, pe_breaker=cb_pe, calendar=calendar, clock=clock)
+    state = ScanStateManager(
+        config=config, 
+        download_breakers={"NSE": cb_down}, 
+        pe_breakers={"NSE": cb_pe}, 
+        calendar=calendar, 
+        clock=clock
+    )
 
     scheduler = Scheduler(
         config=config,
-        scanner_service=scanner,
+        scanner_services={"NSE": scanner},
         state_manager=state,
-        universe_loader=universe,
-        calendar=calendar,
+        universes={"NSE": universe},
+        calendars={"NSE": calendar},
         clock=clock,
     )
 
@@ -63,14 +69,20 @@ def test_effective_interval_calculation():
     calendar = MarketCalendar("NSE")
     cb_down = CircuitBreaker("d", clock=clock)
     cb_pe = CircuitBreaker("p", clock=clock)
-    state = ScanStateManager(config=config, download_breaker=cb_down, pe_breaker=cb_pe, calendar=calendar, clock=clock)
+    state = ScanStateManager(
+        config=config, 
+        download_breakers={"NSE": cb_down}, 
+        pe_breakers={"NSE": cb_pe}, 
+        calendar=calendar, 
+        clock=clock
+    )
 
     # When last scan took 10s: 2 x 10 = 20 < 60 -> effective = 60
-    state.last_scan_seconds = 10.0
+    state.last_scan_seconds["NSE"] = 10.0
     assert state.effective_interval_sec == 60
 
     # When last scan took 45s: 2 x 45 = 90 > 60 -> effective = 90
-    state.last_scan_seconds = 45.0
+    state.last_scan_seconds["NSE"] = 45.0
     assert state.effective_interval_sec == 90
 
 
@@ -82,7 +94,13 @@ def test_stale_evaluation_rules():
     calendar = MarketCalendar("NSE")
     cb_down = CircuitBreaker("d", clock=clock)
     cb_pe = CircuitBreaker("p", clock=clock)
-    state = ScanStateManager(config=config, download_breaker=cb_down, pe_breaker=cb_pe, calendar=calendar, clock=clock)
+    state = ScanStateManager(
+        config=config, 
+        download_breakers={"NSE": cb_down}, 
+        pe_breakers={"NSE": cb_pe}, 
+        calendar=calendar, 
+        clock=clock
+    )
 
     # 1. Initially no successful scan -> stale
     is_stale, reasons = state.evaluate_stale()
@@ -95,10 +113,10 @@ def test_stale_evaluation_rules():
     assert is_stale is False
 
     # 3. Last scan failed -> stale
-    state.last_scan_failed = True
+    state.last_scan_failed["NSE"] = True
     is_stale, reasons = state.evaluate_stale()
     assert is_stale is True
-    state.last_scan_failed = False
+    state.last_scan_failed["NSE"] = False
 
     # 4. Breaker open -> stale
     cb_down.record_systemic_failure()

@@ -22,7 +22,6 @@ class IndicatorResult:
     avg_volume_20d: float
     volume_ratio: float
     session_partial: bool
-    rsi_trend: float
 
 
 def clean_and_validate_bars(
@@ -107,7 +106,7 @@ def compute_wilder_rsi(
         (rsi_value, failure_code, failure_message)
     """
     if len(close_series) < period + 1:
-        return None, None, FailureCode.INSUFFICIENT_HISTORY, (
+        return None, FailureCode.INSUFFICIENT_HISTORY, (
             f"Not enough bars ({len(close_series)}) to calculate RSI({period})"
         )
 
@@ -126,21 +125,18 @@ def compute_wilder_rsi(
 
     # Check 1: Flat series first (no price change or both zero)
     if (latest_gain == 0.0 and latest_loss == 0.0) or (close_series.nunique() <= 1):
-        return None, None, FailureCode.FLAT_SERIES, "Price series is completely flat with zero movement"
+        return None, FailureCode.FLAT_SERIES, "Price series is completely flat with zero movement"
 
     # Check 2: avg_loss == 0 -> RSI = 100.0
     if latest_loss == 0.0:
-        return 100.0, 0.0, None, None
+        return 100.0, None, None
 
     # Calculate full series to get the trend
     rs_series = avg_gain / avg_loss
     rsi_series = 100.0 - (100.0 / (1.0 + rs_series))
     
     rsi = float(rsi_series.iloc[-1])
-    rsi_prev = float(rsi_series.iloc[-2]) if len(rsi_series) > 1 else rsi
-    rsi_trend = rsi - rsi_prev
-
-    return rsi, rsi_trend, None, None
+    return rsi, None, None
 
 
 def compute_volume_metrics(
@@ -222,7 +218,7 @@ def compute_indicators(
         return None, fail_code, fail_msg
 
     # RSI calculation
-    rsi, rsi_trend, rsi_code, rsi_msg = compute_wilder_rsi(cleaned_df["Close"], period=rsi_period)
+    rsi, rsi_code, rsi_msg = compute_wilder_rsi(cleaned_df["Close"], period=rsi_period)
     if rsi_code is not None:
         return None, rsi_code, rsi_msg
 
@@ -246,7 +242,6 @@ def compute_indicators(
             avg_volume_20d=avg20,
             volume_ratio=vol_ratio,
             session_partial=session_partial,
-            rsi_trend=rsi_trend,
         ),
         None,
         None,

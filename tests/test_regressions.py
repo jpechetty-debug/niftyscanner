@@ -79,7 +79,12 @@ def test_refresh_triggers_requested_market():
 def test_not_stale_after_hours_once_post_close_scan_done():
     # Fri 2026-10-09 10:20 UTC = 15:50 IST (20 min after close)
     clk = FakeClock(datetime(2026, 10, 9, 10, 20, tzinfo=timezone.utc))
-    sm = ScanStateManager(Settings(), CircuitBreaker("d", clock=clk), CircuitBreaker("p", clock=clk), clock=clk)
+    sm = ScanStateManager(
+        Settings(), 
+        download_breakers={"NSE": CircuitBreaker("d", clock=clk)}, 
+        pe_breakers={"NSE": CircuitBreaker("p", clock=clk)}, 
+        clock=clk
+    )
     sm._loaded_from_disk_stale = {m: False for m in sm.markets}
     sm.update_scan_success("NSE", [], FunnelCounts(), [], 30.0, 500)
     clk.set_time(clk.now() + timedelta(hours=14))  # next morning, pre-open
@@ -88,7 +93,12 @@ def test_not_stale_after_hours_once_post_close_scan_done():
 
 def test_failure_list_does_not_grow_across_failed_scans():
     clk = FakeClock()
-    sm = ScanStateManager(Settings(), CircuitBreaker("d", clock=clk), CircuitBreaker("p", clock=clk), clock=clk)
+    sm = ScanStateManager(
+        Settings(), 
+        download_breakers={"NSE": CircuitBreaker("d", clock=clk)}, 
+        pe_breakers={"NSE": CircuitBreaker("p", clock=clk)}, 
+        clock=clk
+    )
     f = [FailedSymbolItem(ticker="*", stage=Stage.DOWNLOAD, code=FailureCode.EMPTY_CHUNK, message="m")]
     for _ in range(20):
         sm.update_scan_failure("NSE", f, 1.0, 1)
@@ -125,7 +135,7 @@ def test_symbol_failing_rsi_and_volume_is_counted_once():
     from app.core.outcomes import FunnelTracker
 
     ind = IndicatorResult(date(2026, 10, 1), 100.0, rsi=30.0, volume=1, avg_volume_20d=1.0,
-                          volume_ratio=1.0, session_partial=False, rsi_trend=1.0)
+                          volume_ratio=1.0, session_partial=False)
     t = FunnelTracker()
     assert apply_stage1_filters(ind, Settings(), t) is False
     assert (t.filtered_rsi, t.filtered_volume, t.filtered_liquidity) == (1, 0, 0)
@@ -138,7 +148,7 @@ def test_min_avg_volume_rejection_is_counted():
     from app.core.outcomes import FunnelTracker
 
     ind = IndicatorResult(date(2026, 10, 1), 100.0, rsi=60.0, volume=500, avg_volume_20d=100.0,
-                          volume_ratio=5.0, session_partial=False, rsi_trend=1.0)
+                          volume_ratio=5.0, session_partial=False)
     t = FunnelTracker()
     assert apply_stage1_filters(ind, Settings(MIN_AVG_VOLUME=1000), t) is False
     assert t.filtered_liquidity == 1 and t.passed_rsi_volume == 0

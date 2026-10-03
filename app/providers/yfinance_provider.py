@@ -226,18 +226,13 @@ class YFinanceProvider(MarketDataProvider):
                 return ticker, None, FailureCode.MISSING_PE, "trailingPE key absent in Ticker.info", False
 
             raw_pe = info.get("trailingPE")
-            if raw_pe is None:
-                return ticker, None, FailureCode.MISSING_PE, "trailingPE value is None", False
-
-            try:
-                pe_float = float(raw_pe)
-            except (ValueError, TypeError):
-                return ticker, None, FailureCode.INVALID_PE, f"trailingPE is non-numeric: {raw_pe}", False
-
-            if math.isnan(pe_float) or math.isinf(pe_float) or pe_float <= 0:
-                return ticker, None, FailureCode.INVALID_PE, f"trailingPE has invalid value: {pe_float}", False
-
-            return ticker, pe_float, None, None, False
+            from app.core.filters import evaluate_pe_value
+            pe_val, code, msg = evaluate_pe_value(raw_pe)
+            
+            if code is not None:
+                return ticker, None, code, msg, False
+                
+            return ticker, pe_val, None, None, False
 
         except Exception as e:
             # Check for systemic error indicators (rate limit / network issues)

@@ -43,39 +43,9 @@ def create_app(
     else:
         calendars = {m: MarketCalendar(market=m) for m in cfg.enabled_markets_list}
 
-    download_breaker = CircuitBreaker(
-        name="download",
-        threshold=cfg.BREAKER_THRESHOLD,
-        cooldown_sec=cfg.BREAKER_COOLDOWN_SEC,
-        clock=clk,
-    )
-    pe_breaker = CircuitBreaker(
-        name="pe",
-        threshold=cfg.BREAKER_THRESHOLD,
-        cooldown_sec=cfg.BREAKER_COOLDOWN_SEC,
-        clock=clk,
-    )
+    download_breakers: Dict[str, CircuitBreaker] = {}
+    pe_breakers: Dict[str, CircuitBreaker] = {}
     pe_cache = PECache(ttl_hours=cfg.PE_CACHE_TTL_HOURS, clock=clk)
-
-    yfinance_provider = provider or YFinanceProvider(
-        config=cfg,
-        clock=clk,
-        download_breaker=download_breaker,
-        pe_breaker=pe_breaker,
-        pe_cache=pe_cache,
-    )
-    
-    if cfg.USE_JUGAAD_FOR_NSE:
-        from app.providers.jugaad_provider import JugaadProvider
-        jugaad_provider = JugaadProvider(
-            config=cfg,
-            clock=clk,
-            download_breaker=download_breaker,
-            pe_breaker=pe_breaker,
-            pe_cache=pe_cache,
-        )
-    else:
-        jugaad_provider = yfinance_provider
 
     # Multi-market universes
     universes: Dict[str, Universe] = {}
@@ -91,20 +61,45 @@ def create_app(
 
     # Multi-market scanner services
     scanner_services: Dict[str, StockScannerService] = {}
+    
+    # We will pass a provider instance directly if one was passed in via testing.
+    # Otherwise, we create one for each market.
     for m in cfg.enabled_markets_list:
         cal = calendars.get(m, MarketCalendar(market=m))
-        market_provider = jugaad_provider if m == "NSE" and cfg.USE_JUGAAD_FOR_NSE else yfinance_provider
+        
+        # Instantiate per-market breakers
+        download_breakers[m] = CircuitBreaker(
+            name=f"download_{m.lower()}",
+            threshold=cfg.BREAKER_THRESHOLD,
+            cooldown_sec=cfg.BREAKER_COOLDOWN_SEC,
+            clock=clk,
+        )
+        pe_breakers[m] = CircuitBreaker(
+            name=f"pe_{m.lower()}",
+            threshold=cfg.BREAKER_THRESHOLD,
+            cooldown_sec=cfg.BREAKER_COOLDOWN_SEC,
+            clock=clk,
+        )
+        
+        m_provider = provider or YFinanceProvider(
+            config=cfg,
+            clock=clk,
+            download_breaker=download_breakers[m],
+            pe_breaker=pe_breakers[m],
+            pe_cache=pe_cache,
+        )
+        
         scanner_services[m] = StockScannerService(
             config=cfg,
-            provider=market_provider,
+            provider=m_provider,
             calendar=cal,
             clock=clk,
         )
 
     state_manager = ScanStateManager(
         config=cfg,
-        download_breaker=download_breaker,
-        pe_breaker=pe_breaker,
+        download_breakers=download_breakers,
+        pe_breakers=pe_breakers,
         calendars=calendars,
         clock=clk,
     )
@@ -150,7 +145,6 @@ def create_app(
     app.state.config = cfg
     app.state.clock = clk
     app.state.calendars = calendars
-    app.state.provider = yfinance_provider
     app.state.state_manager = state_manager
     app.state.scheduler = scheduler
 

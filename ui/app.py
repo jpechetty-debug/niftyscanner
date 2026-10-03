@@ -165,9 +165,9 @@ def main() -> None:
 
         st.subheader("Filter Adjustments")
         search_query = st.text_input("Search Ticker / Name", placeholder="e.g. INFY, Sun TV")
-        slider_rsi = st.slider("Minimum RSI", min_value=30.0, max_value=80.0, value=50.0, step=1.0)
-        slider_vol = st.slider("Minimum Volume Ratio", min_value=1.0, max_value=10.0, value=2.0, step=0.1)
-        slider_pe = st.slider("Maximum Trailing P/E", min_value=5.0, max_value=50.0, value=20.0, step=1.0)
+        slider_rsi = st.slider("Minimum RSI", min_value=50.0, max_value=80.0, value=50.0, step=1.0)
+        slider_vol = st.slider("Minimum Volume Ratio", min_value=2.0, max_value=10.0, value=2.0, step=0.1)
+        slider_pe = st.slider("Maximum Trailing P/E", min_value=5.0, max_value=20.0, value=20.0, step=1.0)
         partial_only = st.checkbox("Show Partial Sessions Only", value=False)
 
         st.divider()

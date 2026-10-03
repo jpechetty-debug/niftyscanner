@@ -23,7 +23,6 @@ def make_dummy_indicator(rsi: float, vol_ratio: float, avg20: float = 100_000.0)
         avg_volume_20d=avg20,
         volume_ratio=vol_ratio,
         session_partial=False,
-        rsi_trend=1.0,
     )
 
 
@@ -81,14 +80,14 @@ def test_evaluate_pe_value_classifications():
     assert val is None
     assert code == FailureCode.INVALID_PE
 
-    # Non-positive (<= 0) are now valid
+    # Non-positive (<= 0) are now INVALID_PE
     val, code, _ = evaluate_pe_value(0.0)
-    assert val == 0.0
-    assert code is None
+    assert val is None
+    assert code == FailureCode.INVALID_PE
 
     val, code, _ = evaluate_pe_value(-5.0)
-    assert val == -5.0
-    assert code is None
+    assert val is None
+    assert code == FailureCode.INVALID_PE
 
     # NaN / Inf
     val, code, _ = evaluate_pe_value(float("nan"))

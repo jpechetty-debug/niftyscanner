@@ -31,7 +31,6 @@ class ScanResultItem(BaseModel):
     volume_ratio: float
     score: float
     session_partial: bool
-    rsi_trend: float
     bar_date: str  # ISO YYYY-MM-DD
 
 

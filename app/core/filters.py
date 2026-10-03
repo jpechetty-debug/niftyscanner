@@ -67,8 +67,8 @@ def evaluate_pe_value(
     except (ValueError, TypeError):
         return None, FailureCode.INVALID_PE, f"Trailing P/E is non-numeric: {pe_raw}"
 
-    if math.isnan(pe) or math.isinf(pe):
-        return None, FailureCode.INVALID_PE, f"Trailing P/E has invalid non-numeric or infinite value: {pe}"
+    if math.isnan(pe) or math.isinf(pe) or pe <= 0:
+        return None, FailureCode.INVALID_PE, f"Trailing P/E has invalid non-numeric, infinite, or non-positive value: {pe}"
 
     return pe, None, None
 

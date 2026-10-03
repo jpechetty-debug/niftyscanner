@@ -25,15 +25,15 @@ class ScanStateManager:
     def __init__(
         self,
         config: Settings,
-        download_breaker: CircuitBreaker,
-        pe_breaker: CircuitBreaker,
+        download_breakers: Dict[str, CircuitBreaker],
+        pe_breakers: Dict[str, CircuitBreaker],
         calendar: Optional[MarketCalendar] = None,
         calendars: Optional[Dict[str, MarketCalendar]] = None,
         clock: Optional[Clock] = None,
     ) -> None:
         self.config = config
-        self.download_breaker = download_breaker
-        self.pe_breaker = pe_breaker
+        self.download_breakers = download_breakers
+        self.pe_breakers = pe_breakers
         self.clock = clock or SystemClock()
 
         # Multi-market calendars support
@@ -126,9 +126,11 @@ class ScanStateManager:
         m = market.upper()
         reasons: List[str] = []
 
-        if self.download_breaker.state == CircuitState.OPEN:
+        dl_breaker = self.download_breakers.get(m)
+        pe_breaker = self.pe_breakers.get(m)
+        if dl_breaker and dl_breaker.state == CircuitState.OPEN:
             reasons.append("Download circuit breaker is OPEN")
-        if self.pe_breaker.state == CircuitState.OPEN:
+        if pe_breaker and pe_breaker.state == CircuitState.OPEN:
             reasons.append("P/E circuit breaker is OPEN")
 
         if isinstance(self.last_scan_failed, bool):
@@ -272,8 +274,8 @@ class ScanStateManager:
             "market": m,
             "is_scanning": self.is_scanning.get(m, False),
             "market_status": cal.get_market_status(now).model_dump(),
-            "download_breaker": self.download_breaker.state.value,
-            "pe_breaker": self.pe_breaker.state.value,
+            "download_breaker": self.download_breakers[m].state.value if m in self.download_breakers else "CLOSED",
+            "pe_breaker": self.pe_breakers[m].state.value if m in self.pe_breakers else "CLOSED",
             "stale": is_stale,
             "stale_reasons": stale_reasons,
             "effective_interval_sec": self.get_effective_interval_sec(m),

@@ -51,25 +51,10 @@ class FakeProvider(MarketDataProvider):
 
         for ticker in tickers:
             self.request_count += 1
-            pe_val = SYNTHETIC_PE.get(ticker)
-            if pe_val is None:
-                failures.append(
-                    FailedSymbolItem(
-                        ticker=ticker,
-                        stage=Stage.PE,
-                        code=FailureCode.MISSING_PE,
-                        message="Synthetic P/E is missing for ticker",
-                    )
-                )
-            elif pe_val <= 0:
-                failures.append(
-                    FailedSymbolItem(
-                        ticker=ticker,
-                        stage=Stage.PE,
-                        code=FailureCode.INVALID_PE,
-                        message=f"Synthetic P/E is invalid: {pe_val}",
-                    )
-                )
+            from app.core.filters import evaluate_pe_value
+            pe_val, code, msg = evaluate_pe_value(SYNTHETIC_PE.get(ticker))
+            if code is not None:
+                failures.append(FailedSymbolItem(ticker=ticker, stage=Stage.PE, code=code, message=msg))
             else:
                 pe_dict[ticker] = pe_val
 
