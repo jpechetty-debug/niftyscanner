@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     )
 
     # Timing & Scheduling
-    REFRESH_INTERVAL_SEC: int = 60
+    REFRESH_INTERVAL_SEC: int = 300
     MARKET_CLOSE_SCAN_DELAY_MIN: int = 20
     POST_CLOSE_RETRY_INTERVAL_SEC: int = Field(default=300, gt=0)
     REFRESH_COOLDOWN_SEC: int = 30

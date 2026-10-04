@@ -9,6 +9,9 @@ from loguru import logger
 
 from app.core.interfaces import Universe, UniverseSymbol
 
+# Series codes that cannot pass screening (REIT/InvIT units lack trailing P/E).
+_EXCLUDED_SERIES = {"RR"}
+
 
 class NSEUniverse(Universe):
     """Loads NSE constituents from CSV file (e.g. data/nifty500.csv)."""
@@ -20,7 +23,12 @@ class NSEUniverse(Universe):
         """Load and return constituent symbols from file.
 
         Required columns: 'Symbol', 'Company Name'.
+        Optional column: 'Series' (used to exclude REIT/InvIT units).
         Yahoo ticker = Symbol + '.NS'.
+
+        Exclusions applied during loading:
+        - Symbols starting with 'DUMMY' (placeholder rows in official CSV).
+        - Rows where Series is in _EXCLUDED_SERIES (e.g. 'RR' for REIT units).
         """
         if not self.file_path.exists():
             raise FileNotFoundError(
@@ -46,17 +54,33 @@ class NSEUniverse(Universe):
 
         symbol_col = col_map["symbol"]
         name_col = col_map["company name"]
+        series_col = col_map.get("series")
 
         # Filter valid rows
-        valid_df = df[[symbol_col, name_col]].dropna()
+        valid_df = df.dropna(subset=[symbol_col, name_col])
         symbols: List[UniverseSymbol] = []
         seen = set()
+        skipped_dummy = 0
+        skipped_series = 0
 
         for _, row in valid_df.iterrows():
             sym = str(row[symbol_col]).strip()
             name = str(row[name_col]).strip()
             if not sym or sym in seen:
                 continue
+
+            # Drop placeholder rows (e.g. DUMMYHEG in official Nifty 500 CSV)
+            if sym.upper().startswith("DUMMY"):
+                skipped_dummy += 1
+                continue
+
+            # Drop REIT/InvIT units (series RR) that can never pass P/E screening
+            if series_col is not None:
+                series_val = str(row[series_col]).strip().upper()
+                if series_val in _EXCLUDED_SERIES:
+                    skipped_series += 1
+                    continue
+
             seen.add(sym)
             ticker = f"{sym}.NS"
             symbols.append(
@@ -68,5 +92,10 @@ class NSEUniverse(Universe):
                 )
             )
 
+        if skipped_dummy or skipped_series:
+            logger.info(
+                f"NSE universe exclusions: {skipped_dummy} DUMMY placeholder(s), "
+                f"{skipped_series} series-RR REIT/InvIT unit(s)"
+            )
         logger.info(f"Loaded {len(symbols)} symbols from NSE universe {self.file_path}")
         return symbols

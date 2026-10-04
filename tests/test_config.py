@@ -10,7 +10,7 @@ def test_default_config_valid():
     """Default settings must be valid and adhere to all spec boundaries."""
     settings = Settings()
     assert settings.API_HOST == "127.0.0.1"
-    assert settings.REFRESH_INTERVAL_SEC == 60
+    assert settings.REFRESH_INTERVAL_SEC == 300
     assert settings.MIN_RSI == 40.0
     assert settings.RSI_CAP == 80.0
     assert settings.MIN_VOLUME_RATIO == 1.5
