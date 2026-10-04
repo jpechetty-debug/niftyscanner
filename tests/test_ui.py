@@ -125,7 +125,7 @@ def test_light_workspace_search_sort_and_empty_state(monkeypatch):
     assert len(page.dataframe[0].value) == 3
     assert page.dataframe[0].value.iloc[0]["ticker"] == "TEST2.NS"
     assert page.warning and "outdated" in page.warning[0].value
-    assert any("11:00 IST" in caption.value for caption in page.caption)
+    assert any("11:00 IST" in item.value for item in page.markdown if 'notice-timestamp' in item.value)
     page.selectbox(key="sort_NSE").select("P/E").run()
     assert not page.exception
     assert page.dataframe[0].value.iloc[0]["ticker"] == "TEST1.NS"
@@ -223,6 +223,30 @@ def test_terminal_busy_scan_and_cooldown_feedback(terminal_page, monkeypatch):
     monkeypatch.setattr(client, "get_results", lambda *a, **k: (None, "API unavailable"))
     page.run()
     assert any("API unavailable" in item.value for item in page.error)
+
+
+def test_terminal_header_connection_and_execution_action(terminal_page, monkeypatch):
+    """The new execution button uses HTTP; disconnected headers disable scans."""
+    page, _, client = terminal_page
+    requests = []
+
+    def refresh(*args, **kwargs):
+        requests.append(kwargs["market"])
+        return False, "Cooldown active.", 12
+
+    monkeypatch.setattr(client, "post_refresh", refresh)
+    page.run()
+    assert any('CONNECTED' in item.value and 'terminal-bar' in item.value for item in page.markdown)
+    next(button for button in page.button if button.label == "Run scan").click().run()
+    assert not page.exception
+    assert requests == ["NSE"]
+    assert any("12s" in item.value for item in page.get("toast"))
+    monkeypatch.setattr(client, "get_status", lambda *a, **k: (None, "API unavailable"))
+    page.run()
+    assert not page.exception
+    assert any('DISCONNECTED' in item.value and 'terminal-bar' in item.value for item in page.markdown)
+    assert next(button for button in page.button if button.label == "Scan now").disabled
+    assert not any(button.label == "Run scan" for button in page.button)
 
 
 def test_screener_api_client_error_handling(monkeypatch):
