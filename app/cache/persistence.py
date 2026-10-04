@@ -88,11 +88,16 @@ def atomic_write_json(file_path: Path | str, data: Dict[str, Any]) -> None:
         temp_name = tf.name
 
     # Atomic replace (works on Windows & POSIX when temp file is closed)
-    os.replace(temp_name, path)
+    try:
+        os.replace(temp_name, path)
+    finally:
+        Path(temp_name).unlink(missing_ok=True)
 
 
 def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data") -> Path:
-    """Persist successful scan payload to SQLite database."""
+    """Persist the atomic last-scan snapshot and append SQLite history."""
+    snapshot = {**payload, "schema_version": SCHEMA_VERSION}
+    atomic_write_json(Path(data_dir) / f"last_scan_{market.upper()}.json", snapshot)
     conn = _get_db_connection(data_dir)
     try:
         cursor = conn.cursor()
@@ -156,7 +161,18 @@ def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data")
 
 
 def load_last_scan_on_startup(market: str, data_dir: str = "data") -> Optional[Dict[str, Any]]:
-    """Load persisted scan from SQLite on startup, marking stale = True."""
+    """Restore an atomic snapshot, falling back to legacy SQLite history."""
+    snapshot = Path(data_dir) / f"last_scan_{market.upper()}.json"
+    if snapshot.exists():
+        try:
+            payload = json.loads(snapshot.read_text(encoding="utf-8"))
+            if payload.get("schema_version") != SCHEMA_VERSION:
+                raise ValueError("Unsupported snapshot schema version")
+            payload["meta"]["stale"] = True
+            payload["meta"]["stale_reasons"] = ["Loaded from disk on startup; awaiting initial scan"]
+            return payload
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            logger.warning(f"Could not restore snapshot for {market}: {error}")
     db_path = Path(data_dir) / "history.db"
     if not db_path.exists():
         return None

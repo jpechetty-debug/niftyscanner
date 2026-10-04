@@ -61,9 +61,9 @@ To resume in a new session, the user pastes this spec, the latest STATE SUMMARY,
 
 A local-first, single-user stock screener that returns stocks meeting ALL of:
 
-- RSI(14) > MIN_RSI (50)
-- Latest volume > MIN_VOLUME_RATIO (2) x average volume of the previous VOLUME_LOOKBACK (20) completed sessions
-- Trailing P/E < MAX_PE (20)
+- RSI(14) > MIN_RSI (40), and RSI is non-decreasing when REQUIRE_RSI_TREND_UP is enabled
+- Volume ratio > MIN_VOLUME_RATIO (1.5); intraday ratios use the bounded projection described in section 9
+- Finite trailing P/E in MIN_PE (-500) <= P/E < MAX_PE (50); non-positive values are permitted but receive zero valuation score
 
 Data source: yfinance only. Markets: NSE Nifty 500 (Phases 1-3), NYSE (Phase 4) through the same Universe interface. Results are ranked by a stable composite score. Runs locally, bound to 127.0.0.1 by default.
 
@@ -92,7 +92,7 @@ Python 3.12.
 
 Pin every version in `requirements.txt` after resolving the latest tested versions. If you cannot resolve them offline, say so and mark it NOT VERIFIED. Anything else requires approval.
 
-Holiday and session source: `exchange_calendars` (`XNSE` for NSE, `XNYS` for NYSE). In Phase 0, verify both calendars are available in the pinned version. If not, stop and ask.
+Holiday and session source: `exchange_calendars` (`XBOM` as the available NSE proxy, `XNYS` for NYSE); the NSE proxy limitation must be disclosed. In Phase 0, verify both calendars are available in the pinned version. If not, stop and ask.
 
 ---
 
@@ -148,7 +148,7 @@ No threshold is a literal in code. All values below are config with these defaul
 | API_PORT | 8000 | |
 | UI_PORT | 8501 | |
 | API_BASE_URL | http://127.0.0.1:8000 | used by UI only |
-| ENABLED_MARKETS | NSE | becomes `NSE,NYSE` in Phase 4 |
+| ENABLED_MARKETS | NSE,NYSE | Phase 4 enabled |
 | NSE_UNIVERSE_PATH | data/nifty500.csv | |
 | NYSE_UNIVERSE_PATH | data/otherlisted.txt | |
 | REFRESH_INTERVAL_SEC | 60 | allowed 30-300 |
@@ -164,14 +164,17 @@ No threshold is a literal in code. All values below are config with these defaul
 | BREAKER_COOLDOWN_SEC | 60 | |
 | SCAN_MIN_FETCH_RATIO | 0.5 | below this the scan counts as failed |
 | RSI_PERIOD | 14 | |
-| MIN_RSI | 50 | strict `>` |
+| MIN_RSI | 40 | strict `>` |
+| REQUIRE_RSI_TREND_UP | true | latest RSI >= previous RSI |
 | RSI_CAP | 80 | score normalisation |
-| MIN_VOLUME_RATIO | 2 | strict `>` |
+| MIN_VOLUME_RATIO | 1.5 | strict `>` |
+| MIN_VOLUME_PROJECTION_ELAPSED | 0.25 | projection denominator floor, in (0, 1] |
 | VOLUME_RATIO_CAP | 10 | score normalisation |
 | VOLUME_LOOKBACK | 20 | |
 | MIN_AVG_VOLUME | 0 | 0 = off. Floor on avg20, for illiquid names |
-| MAX_PE | 20 | strict `<` |
-| MIN_PE | 0 | 0 = off. If > 0, P/E below it is filtered out |
+| MAX_PE | 50 | strict `<` |
+| MIN_PE | -500 | inclusive lower bound |
+| OPTIMAL_PE | 10 | valuation-score peak; 0 < OPTIMAL_PE < MAX_PE |
 | MIN_BARS | 60 | valid Close rows required |
 | MAX_BAR_AGE_SESSIONS | 2 | stale-bar threshold |
 | WEIGHT_VOLUME / RSI / PE | 0.40 / 0.35 / 0.25 | |
@@ -182,8 +185,11 @@ No threshold is a literal in code. All values below are config with these defaul
 **Validation at startup (fail fast):**
 - weights satisfy `math.isclose(sum, 1.0, abs_tol=1e-6)`
 - `REFRESH_INTERVAL_SEC` in 30-300
-- `RSI_CAP > MIN_RSI`, `VOLUME_RATIO_CAP > MIN_VOLUME_RATIO`, `MAX_PE > MIN_PE >= 0`
+- `RSI_CAP > MIN_RSI`, `VOLUME_RATIO_CAP > MIN_VOLUME_RATIO`, `MAX_PE > MIN_PE`, `0 < OPTIMAL_PE < MAX_PE`
 - `MIN_BARS >= VOLUME_LOOKBACK + 1`
+- Operational counts/workers/retries and cache TTL are positive; fetch ratio is in (0, 1].
+- Weights and delays are non-negative and finite; delay maximum >= minimum. Screening thresholds are finite.
+- Enabled markets contain unique NSE/NYSE values only.
 
 ---
 
@@ -223,7 +229,8 @@ Future providers must be swappable. Time-dependent code takes an injected `Clock
 
 - Download: daily bars, `period="6mo"`, `interval="1d"`, `auto_adjust=True`, `threads=DOWNLOAD_THREADS`. Handle the single-ticker chunk shape (flat columns) as well as the multi-ticker MultiIndex.
 - Dedupe by date (keep last). Some exchanges return a duplicate last-date row.
-- Normalise the index to exchange-local dates.
+- Normalise the index to exchange-local dates. Naive daily indexes are exchange-local date labels; aware indexes are converted to exchange time.
+- Cached histories may use 5-day delta downloads; overlapping completed bars must be consistent, otherwise retry a full 6-month download and fail the symbol if that refetch fails.
 - Drop rows where **Close is NaN only**.
 - NaN or 0 volume on the latest bar is reported as `MISSING_VOLUME` / `INVALID_VOLUME`. Never drop it and fall back to an older bar.
 - `STALE_BAR`: the latest bar is more than `MAX_BAR_AGE_SESSIONS` behind the last expected session per the market calendar. This catches halted or suspended stocks.
@@ -242,11 +249,11 @@ Future providers must be swappable. Time-dependent code takes an injected `Clock
 - `current_volume` = latest daily bar.
 - `avg20` = mean of the previous `VOLUME_LOOKBACK` completed sessions. The latest bar is NOT included.
 - Any NaN in the 20-bar window -> `MISSING_VOLUME`. `avg20 == 0` -> `INVALID_VOLUME`.
-- `volume_ratio = current_volume / avg20`.
+- When the bar is partial: `volume_ratio = current_volume / max(session_elapsed_fraction, MIN_VOLUME_PROJECTION_ELAPSED) / avg20`; otherwise `volume_ratio = current_volume / avg20`. `volume` always remains the observed value. The projection assumes a constant rate of trading and is not a prediction of closing volume.
 - If `MIN_AVG_VOLUME > 0` and `avg20 < MIN_AVG_VOLUME`: filtered out (funnel only).
 
 ## session_partial
-`session_partial = (latest bar date == exchange-local today) AND (market currently open)`. Exposed in results. Document in `AGENTS.md`: current-session volume may be incomplete, which makes volume ratios conservative while the market is open.
+`session_partial = (latest bar date == exchange-local today) AND (market currently open)`. Exposed in results. Document in `AGENTS.md`: current-session volume is incomplete; partial-session volume ratios use a bounded linear projection and may overestimate or underestimate closing volume.
 
 ---
 
@@ -261,9 +268,9 @@ Future providers must be swappable. Time-dependent code takes an injected `Clock
 - Fetch `trailingPE` via `Ticker.info` in a thread pool (`PE_WORKERS`). Thread pool only here.
 - Rules:
   - key absent -> `MISSING_PE` (failed; cached 24h)
-  - non-numeric, NaN, inf, or `<= 0` -> `INVALID_PE` (failed)
+  - non-numeric, NaN, or inf -> `INVALID_PE` (failed); finite zero/negative values are valid inputs
   - fetch error -> `PE_FETCH_FAILED` (failed; NEVER cached; retried next scan)
-  - `PE >= MAX_PE`, or `PE < MIN_PE` when MIN_PE > 0 -> filtered out (funnel only)
+  - `PE >= MAX_PE` or `PE < MIN_PE` -> filtered out (funnel only)
 
 **Filter logic:** all filters are AND. Ranking applies only after all pass.
 
@@ -277,7 +284,7 @@ Future providers must be swappable. Time-dependent code takes an injected `Clock
 - `stage` in: `universe | download | indicators | pe`
 - `code` in: `INSUFFICIENT_HISTORY, FLAT_SERIES, MISSING_VOLUME, INVALID_VOLUME, STALE_BAR, MISSING_PE, INVALID_PE, PE_FETCH_FAILED, DOWNLOAD_ERROR, EMPTY_CHUNK, THROTTLED, CIRCUIT_OPEN, DELISTED, UNKNOWN`
 - A symbol with an all-NaN column in an otherwise healthy chunk -> `DELISTED` (message: no data returned, possibly delisted or symbol mismatch).
-- Chunk-level failures (`EMPTY_CHUNK`, `THROTTLED`, `DOWNLOAD_ERROR` after retries) use one row with `ticker: "*"` and a message with the chunk index and symbol count, not one row per symbol.
+- Chunk-level failures (`EMPTY_CHUNK`, `THROTTLED`, `DOWNLOAD_ERROR` after retries) use one row with `ticker: "*"` and a message with the chunk index and symbol count, not one row per symbol. `funnel.failed` counts affected symbols, independently of record count; `filtered_liquidity` is a separate bucket.
 
 ---
 
@@ -288,7 +295,9 @@ score = W_V * V + W_R * R + W_P * P
 
 V = (volume_ratio - MIN_VOLUME_RATIO) / (VOLUME_RATIO_CAP - MIN_VOLUME_RATIO)
 R = (RSI - MIN_RSI) / (RSI_CAP - MIN_RSI)
-P = (MAX_PE - PE) / MAX_PE
+P = 0                              if PE <= 0 or PE >= MAX_PE
+P = PE / OPTIMAL_PE                if 0 < PE <= OPTIMAL_PE
+P = (MAX_PE - PE)/(MAX_PE-OPTIMAL_PE) otherwise
 ```
 
 - Clip each component to [0, 1]. Never use min-max normalisation across the result set.
@@ -320,7 +329,8 @@ P = (MAX_PE - PE) / MAX_PE
   - write atomically (temp file + rename)
   - include a schema version
   - on startup, load it as `stale = true` until the first scan succeeds
-- `data/settings.json` is also written atomically.
+- SQLite `data/history.db` retains scan history and supports legacy startup restore when no valid JSON snapshot exists. JSON is the primary versioned snapshot. SQLite remains local and uses the Python standard library.
+- `data/settings.json` is also written atomically; persistence failure must leave runtime settings unchanged.
 
 ---
 
@@ -331,9 +341,10 @@ P = (MAX_PE - PE) / MAX_PE
 - Scans run in a worker thread (`asyncio.to_thread`) because yfinance is synchronous. The event loop must stay responsive, so `/api/results` never hangs during a scan.
 - Interval is measured from scan completion.
 - `effective_interval = max(REFRESH_INTERVAL_SEC, 2 x last_scan_seconds)`.
-- **Market-hours gating:** scan while the market is open; once `MARKET_CLOSE_SCAN_DELAY_MIN` after close; once at startup. When closed, no scheduled scans: serve the last result with `market_status = closed`. Manual refresh is still allowed when closed.
-- **Stale:** `stale = true` only if (a) a breaker is open, OR (b) the last scan failed, OR (c) the last success is older than `3 x effective_interval`. TTL expiry alone never sets it. Expose `stale_reasons`.
-- CLI and scan meta report `scan_seconds` and request counts so defaults can be tuned from real numbers.
+- **Market-hours gating:** scan while the market is open; one attempt `MARKET_CLOSE_SCAN_DELAY_MIN` after close; once at startup. When closed, no scheduled scans: serve the last result with `market_status = closed`. Manual refresh is still allowed when closed.
+- **Stale:** true while awaiting startup success, while a breaker is open, or after a failed scan. During market hours, age > `3 x effective_interval` also sets stale. When closed, a success captured after the last session close remains fresh; otherwise it is stale. TTL expiry alone never sets stale. Expose `stale_reasons`.
+- CLI and scan meta report `scan_seconds` and request counts. Counts measure ticker download attempts and Ticker.info attempts, including retries and adjustment refetches; they are not a count of internal HTTP requests.
+- Manual refresh reserves the global scan slot before returning 202. Shutdown drains accepted scans. Universe loading and disk persistence run off the event loop.
 
 ---
 
@@ -387,7 +398,7 @@ Response models are Pydantic. Timestamps are ISO 8601 with offset.
   "failed_symbols": []
 }
 ```
-`next_refresh_at` is null when the market is closed and no scan is scheduled.
+`next_refresh_at` is the stable completion-based deadline, or the pending post-close target. It is null during a scan or when no scan is scheduled. Status also exposes this field. `data_as_of` is the latest fetched daily bar at exchange-local midnight (ISO 8601 with offset), even when no stocks qualify; it is distinct from `last_refreshed`. A 429 includes both the Retry-After header and `detail.retry_after`.
 
 **Result fields:** ticker, name, market, price, pe, rsi, volume, avg_volume_20d, volume_ratio, score, session_partial, bar_date.
 
@@ -396,7 +407,7 @@ Response models are Pydantic. Timestamps are ISO 8601 with offset.
 # 18. STREAMLIT UI
 
 - Table, search, sorting, sidebar filters, CSV export, refresh button, last refresh time, next-refresh countdown, market selector (NYSE disabled until Phase 4), stale banner, delayed-data notice.
-- Use the built-in Streamlit dark theme. Use `st.fragment(run_every=...)` for the countdown.
+- Use the existing Streamlit theme. Use `st.fragment(run_every=...)` for the countdown.
 - Refresh button calls `POST /api/refresh` and shows `retry_after` on 429.
 - The UI talks ONLY to FastAPI via `API_BASE_URL` (httpx). It never imports `app` internals and never triggers scans directly.
 - Footer: "Not financial advice."
@@ -430,6 +441,7 @@ pytest, plus pytest-asyncio for async tests. Mock yfinance. No network. Live tes
 - scheduler gating with a fake clock (open, post-close, startup, closed)
 - event loop stays responsive during a blocking fake scan
 - atomic writes and stale-on-startup load
+- actual scheduler loop, completion-based intervals, cross-market reservations, shutdown draining, stable deadlines, one half-open trial, mid-stage breaker aborts, retry accounting and NYSE date labels
 - settings precedence and range validation
 - API status codes (202/404/422/429), response models
 - universe parsing and exclusion heuristics on SYNTHETIC fixtures, with excluded-count logging

@@ -60,7 +60,7 @@ def clean_and_validate_bars(
     # Convert index to timezone-aware if naive, then to exchange tz, then to date
     idx = pd.to_datetime(df.index)
     if idx.tz is None:
-        idx = idx.tz_localize("UTC")
+        idx = idx.tz_localize(calendar.tz)
     idx_local = idx.tz_convert(calendar.tz)
     df = df.copy()
     df.index = idx_local.normalize()

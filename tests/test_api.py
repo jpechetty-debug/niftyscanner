@@ -135,34 +135,4 @@ def test_settings_get_and_put(app_and_client):
     assert res_get2.json()["refresh_interval_sec"] == 120
 
 
-@pytest.mark.asyncio
-async def test_event_loop_stays_responsive_during_scan(app_and_client):
-    """Verify FastAPI event loop stays responsive (GET /api/results never hangs during scan)."""
-    app, client, clock = app_and_client
-
-    # Simulate a slow scan in background task
-    async def slow_scan_simulation():
-        async with app.state.state_manager.scan_lock:
-            app.state.state_manager.is_scanning["NSE"] = True
-            await asyncio.sleep(0.3)  # simulates time in worker thread
-            app.state.state_manager.is_scanning["NSE"] = False
-
-    scan_task = asyncio.create_task(slow_scan_simulation())
-
-    # Give event loop a cycle so scan task acquires lock
-    await asyncio.sleep(0.02)
-    assert app.state.state_manager.is_scanning["NSE"] is True
-
-    # Immediate API calls must succeed immediately with 200
-    start = datetime.now()
-    res_results = client.get("/api/results?market=NSE")
-    res_status = client.get("/api/status")
-    duration = (datetime.now() - start).total_seconds()
-
-    assert res_results.status_code == 200
-    assert res_status.status_code == 200
-    assert res_status.json()["is_scanning"] is True
-    # Verify response was fast (under 100ms, not blocked by 300ms scan)
-    assert duration < 0.2
-
-    await scan_task
+# Actual worker-thread responsiveness and shutdown are covered in test_repairs.py.

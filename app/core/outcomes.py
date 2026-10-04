@@ -43,6 +43,7 @@ class FailedSymbolItem(BaseModel):
     stage: Stage
     code: FailureCode
     message: str
+    affected_count: int = Field(default=1, ge=0, exclude=True)
 
 
 class FunnelCounts(BaseModel):
@@ -72,12 +73,12 @@ class FunnelTracker:
     passed_pe: int = 0
     failed_symbols: List[FailedSymbolItem] = field(default_factory=list)
 
-    def record_failure(self, ticker: str, stage: Stage, code: FailureCode, message: str) -> None:
+    def record_failure(self, ticker: str, stage: Stage, code: FailureCode, message: str, affected_count: int = 1) -> None:
         """Record a failure item and increment the failure count."""
         self.failed_symbols.append(
-            FailedSymbolItem(ticker=ticker, stage=stage, code=code, message=message)
+            FailedSymbolItem(ticker=ticker, stage=stage, code=code, message=message, affected_count=affected_count)
         )
-        self.failed += 1
+        self.failed += affected_count
 
     def to_counts(self) -> FunnelCounts:
         """Convert tracker numbers to Pydantic FunnelCounts."""

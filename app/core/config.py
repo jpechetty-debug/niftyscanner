@@ -46,38 +46,39 @@ class Settings(BaseSettings):
 
     # Download & Data Fetching
     USE_JUGAAD_FOR_NSE: bool = False
-    CHUNK_SIZE: int = 100
-    CHUNK_DELAY_MIN_SEC: float = 1.0
-    CHUNK_DELAY_MAX_SEC: float = 2.0
-    DOWNLOAD_THREADS: int = 4
-    PE_WORKERS: int = 4
-    PE_CACHE_TTL_HOURS: int = 24
+    CHUNK_SIZE: int = Field(default=100, gt=0)
+    CHUNK_DELAY_MIN_SEC: float = Field(default=1.0, ge=0, allow_inf_nan=False)
+    CHUNK_DELAY_MAX_SEC: float = Field(default=2.0, ge=0, allow_inf_nan=False)
+    DOWNLOAD_THREADS: int = Field(default=4, gt=0)
+    PE_WORKERS: int = Field(default=4, gt=0)
+    PE_CACHE_TTL_HOURS: int = Field(default=24, gt=0)
 
     # Resilience & Breakers
-    MAX_RETRIES: int = 4
-    BREAKER_THRESHOLD: int = 5
-    BREAKER_COOLDOWN_SEC: int = 60
-    SCAN_MIN_FETCH_RATIO: float = 0.5
+    MAX_RETRIES: int = Field(default=4, gt=0)
+    BREAKER_THRESHOLD: int = Field(default=5, gt=0)
+    BREAKER_COOLDOWN_SEC: int = Field(default=60, gt=0)
+    SCAN_MIN_FETCH_RATIO: float = Field(default=0.5, gt=0, le=1)
 
     # Technical & Fundamental Filters
-    RSI_PERIOD: int = 14
+    RSI_PERIOD: int = Field(default=14, gt=0)
     MIN_RSI: float = 40.0
     RSI_CAP: float = 80.0
     REQUIRE_RSI_TREND_UP: bool = True
     MIN_VOLUME_RATIO: float = 1.5
     VOLUME_RATIO_CAP: float = 10.0
-    VOLUME_LOOKBACK: int = 20
-    MIN_AVG_VOLUME: float = 0.0
+    VOLUME_LOOKBACK: int = Field(default=20, gt=0)
+    MIN_AVG_VOLUME: float = Field(default=0.0, ge=0, allow_inf_nan=False)
     MIN_VOLUME_PROJECTION_ELAPSED: float = 0.25
+    OPTIMAL_PE: float = Field(default=10.0, gt=0, allow_inf_nan=False)
     MAX_PE: float = 50.0
     MIN_PE: float = -500.0
-    MIN_BARS: int = 60
+    MIN_BARS: int = Field(default=60, gt=0)
     MAX_BAR_AGE_SESSIONS: int = 2
 
     # Scoring Weights & Logging
-    WEIGHT_VOLUME: float = 0.40
-    WEIGHT_RSI: float = 0.35
-    WEIGHT_PE: float = 0.25
+    WEIGHT_VOLUME: float = Field(default=0.40, ge=0, allow_inf_nan=False)
+    WEIGHT_RSI: float = Field(default=0.35, ge=0, allow_inf_nan=False)
+    WEIGHT_PE: float = Field(default=0.25, ge=0, allow_inf_nan=False)
     LOG_LEVEL: str = "INFO"
 
     @property
@@ -94,6 +95,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_business_rules(self) -> Settings:
+        if not self.enabled_markets_list or set(self.enabled_markets_list) - {"NSE", "NYSE"}:
+            raise ValueError("ENABLED_MARKETS must contain NSE and/or NYSE")
+        if len(self.enabled_markets_list) != len(set(self.enabled_markets_list)):
+            raise ValueError("ENABLED_MARKETS contains duplicates")
+        if self.CHUNK_DELAY_MAX_SEC < self.CHUNK_DELAY_MIN_SEC:
+            raise ValueError("CHUNK_DELAY_MAX_SEC must be >= CHUNK_DELAY_MIN_SEC")
+        if not all(math.isfinite(v) for v in (self.MIN_RSI, self.RSI_CAP, self.MIN_VOLUME_RATIO, self.VOLUME_RATIO_CAP, self.MIN_PE, self.MAX_PE)):
+            raise ValueError("Screening thresholds must be finite")
         # Check weights sum to 1.0
         weight_sum = self.WEIGHT_VOLUME + self.WEIGHT_RSI + self.WEIGHT_PE
         if not math.isclose(weight_sum, 1.0, abs_tol=1e-6):
@@ -123,6 +132,9 @@ class Settings(BaseSettings):
                 f"got MAX_PE={self.MAX_PE}, MIN_PE={self.MIN_PE}"
             )
 
+        if self.OPTIMAL_PE >= self.MAX_PE:
+            raise ValueError("OPTIMAL_PE must be below MAX_PE")
+
         # Check history length relative to lookback
         if self.MIN_BARS < self.VOLUME_LOOKBACK + 1:
             raise ValueError(
@@ -144,8 +156,7 @@ def load_settings(settings_file: str | Path = "data/settings.json") -> Settings:
             if "REFRESH_INTERVAL_SEC" in data:
                 new_interval = int(data["REFRESH_INTERVAL_SEC"])
                 # Return updated settings instance with validation
-                settings = settings.model_copy(update={"REFRESH_INTERVAL_SEC": new_interval})
-                settings.validate_refresh_interval(settings.REFRESH_INTERVAL_SEC)
+                settings = Settings(**{**settings.model_dump(), "REFRESH_INTERVAL_SEC": new_interval})
         except Exception as e:
             # If settings file is corrupted, fallback to base settings
             from loguru import logger

@@ -161,8 +161,9 @@ def test_failed_chunk_counts_every_symbol(monkeypatch):
     tickers = [f"T{i}.NS" for i in range(7)]
     res, _, fails = prov.download_bars(tickers)
     assert res == {}
-    assert sorted(f.ticker for f in fails if f.ticker != "*") == sorted(tickers)
-    assert all(f.ticker != "*" for f in fails)
+    assert sum(f.affected_count for f in fails) == len(tickers)
+    assert len(fails) == 3
+    assert all(f.ticker == "*" for f in fails)
 
 
 def test_ui_results_section_is_an_auto_refreshing_fragment():

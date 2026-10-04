@@ -50,8 +50,8 @@ def filter_results_dataframe(
     if search_query.strip():
         q = search_query.strip().lower()
         mask = (
-            filtered["ticker"].astype(str).str.lower().str.contains(q)
-            | filtered["name"].astype(str).str.lower().str.contains(q)
+            filtered["ticker"].astype(str).str.lower().str.contains(q, regex=False)
+            | filtered["name"].astype(str).str.lower().str.contains(q, regex=False)
         )
         filtered = filtered[mask]
 
@@ -94,6 +94,13 @@ def live_status_and_countdown_fragment(market: str) -> None:
             eff_int = status_data.get("effective_interval_sec", 60)
             last_sec = status_data.get("last_scan_seconds", 0.0)
             st.metric("Effective Interval", f"{eff_int}s", help=f"Last scan duration: {last_sec}s")
+
+        deadline = status_data.get("next_refresh_at")
+        if deadline:
+            remaining = max(0, int((datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds()))
+            st.caption(f"Next refresh in {remaining}s")
+        else:
+            st.caption("Next refresh: scan in progress" if is_scanning else "No scan scheduled")
 
         with col4:
             if st.button("🔄 Trigger Scan Now", use_container_width=True, disabled=is_scanning):

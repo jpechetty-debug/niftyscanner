@@ -43,6 +43,7 @@ class StatusResponse(BaseModel):
     effective_interval_sec: int
     last_scan_seconds: float
     last_refreshed: Optional[str] = None
+    next_refresh_at: Optional[str] = None
 
 
 class RefreshAcceptedResponse(BaseModel):

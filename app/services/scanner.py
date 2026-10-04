@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from loguru import logger
 
@@ -58,6 +59,7 @@ class StockScannerService:
             - Request count
             - Scan duration in seconds
         """
+        self.data_as_of = ""
         start_time = time.perf_counter()
         tracker = FunnelTracker(universe=len(constituents))
         total_requests = 0
@@ -75,14 +77,24 @@ class StockScannerService:
         total_requests += req_count
 
         for fail in download_fails:
-            tracker.record_failure(fail.ticker, fail.stage, fail.code, fail.message)
+            tracker.record_failure(fail.ticker, fail.stage, fail.code, fail.message, fail.affected_count)
 
         tracker.fetched = len(bars_dict)
         logger.info(f"Successfully fetched bar history for {tracker.fetched} symbols.")
 
+        if any(f.code == FailureCode.CIRCUIT_OPEN for f in download_fails):
+            return [], tracker.to_counts(), tracker.failed_symbols, total_requests, round(time.perf_counter() - start_time, 2), False
+
         stage1_survivors: Dict[str, IndicatorResult] = {}
 
+        latest_data_date = None
         for ticker, df in bars_dict.items():
+            if "Close" in df and df["Close"].notna().any():
+                index = pd.DatetimeIndex(pd.to_datetime(df.loc[df["Close"].notna()].index))
+                index = index.tz_localize(self.calendar.tz) if index.tz is None else index.tz_convert(self.calendar.tz)
+                bar_timestamp = index.max().normalize()
+                latest_data_date = max(latest_data_date, bar_timestamp) if latest_data_date is not None else bar_timestamp
+                self.data_as_of = latest_data_date.isoformat()
             indicator, fail_code, fail_msg = compute_indicators(
                 df=df,
                 current_dt=current_dt,
@@ -124,7 +136,7 @@ class StockScannerService:
             total_requests += pe_reqs
 
             for fail in pe_fails:
-                tracker.record_failure(fail.ticker, fail.stage, fail.code, fail.message)
+                tracker.record_failure(fail.ticker, fail.stage, fail.code, fail.message, fail.affected_count)
 
             for ticker, pe_value in pe_dict.items():
                 if apply_stage2_pe_filter(pe_value, self.config, tracker):

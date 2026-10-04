@@ -19,7 +19,7 @@
 
 ## 4. Market Hours & session_partial
 - `session_partial = (latest bar date == exchange-local today) AND (market currently open)`.
-- When `session_partial` is true, current-session volume may be incomplete, which makes volume ratios conservative while the market is open. This field is explicitly exposed in result payloads.
+- When `session_partial` is true, current-session volume is incomplete; partial-session volume ratios use a bounded linear projection and may overestimate or underestimate closing volume. This field is explicitly exposed in result payloads.
 
 ## 5. Architectural Invariants
 - Local-first, single-user, bound to `127.0.0.1` by default.

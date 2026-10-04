@@ -66,9 +66,12 @@ class Scheduler:
         self._post_close_done: Dict[str, Optional[str]] = {m: None for m in self.config.enabled_markets_list}
         self._task: Optional[asyncio.Task] = None
         self._bg_tasks: set = set()
+        self._reserved_market: Optional[str] = None
+        self._stopping = False
 
     async def start(self) -> None:
         """Start the background scheduler task."""
+        self._stopping = False
         self._stop_event.clear()
         self._task = asyncio.create_task(self._run_loop(), name="scanner_scheduler_loop")
         logger.info(f"Background screening scheduler started for markets: {self.config.enabled_markets_list}")
@@ -76,10 +79,17 @@ class Scheduler:
     async def stop(self) -> None:
         """Signal the scheduler to stop and await termination."""
         logger.info("Stopping screening scheduler...")
+        self._stopping = True
         self._stop_event.set()
         self._trigger_event.set()
-        if self._task and not self._task.done():
-            await self._task
+        tasks = list(self._bg_tasks)
+        if self._task:
+            tasks.append(self._task)
+        if tasks:
+            outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+            for outcome in outcomes:
+                if isinstance(outcome, Exception):
+                    logger.error(f"Scheduler task failed: {outcome}")
         logger.info("Screening scheduler stopped.")
 
     async def execute_scan(self, market: str = "NSE") -> bool:
@@ -92,13 +102,8 @@ class Scheduler:
             logger.error(f"No scanner or universe registered for market {m}")
             return False
 
-        lock = self.state.scan_locks.get(m)
-        if not lock:
-            lock = asyncio.Lock()
-            self.state.scan_locks[m] = lock
-
-        if lock.locked():
-            logger.warning(f"Scan for {m} already in progress. Skipping trigger.")
+        lock = self.state.scan_lock
+        if self._reserved_market is not None or lock.locked():
             return False
 
         async with lock:
@@ -107,7 +112,7 @@ class Scheduler:
             self.state.last_scan_started_at[m] = now
 
             try:
-                constituents = universe.load()
+                constituents = await asyncio.to_thread(universe.load)
                 logger.info(
                     f"[{m}] Loaded {len(constituents)} constituents. Running scan in worker thread."
                 )
@@ -129,7 +134,10 @@ class Scheduler:
                         failures=failures,
                         scan_seconds=scan_sec,
                         request_count=req_count,
+                        data_as_of=getattr(scanner, "data_as_of", ""),
+                        persist=False,
                     )
+                    await asyncio.to_thread(self.state.persist_last_scan, m)
                 else:
                     self.state.update_scan_failure(
                         market=m,
@@ -149,13 +157,13 @@ class Scheduler:
                 )
                 return False
             finally:
+                self.state.last_scan_completed_at[m] = self.clock.now()
                 self.state.is_scanning[m] = False
 
     def can_trigger_manual_refresh(self, market: str = "NSE") -> Tuple[bool, Optional[int]]:
         """Check if manual refresh for a market is permitted under lock and cooldown."""
         m = market.upper()
-        lock = self.state.scan_locks.get(m)
-        if self.state.is_scanning.get(m, False) or (lock and lock.locked()):
+        if self._stopping or self._reserved_market is not None or self.state.scan_lock.locked() or any(self.state.is_scanning.values()):
             return False, self.config.REFRESH_COOLDOWN_SEC
 
         last_started = self.state.last_scan_started_at.get(m)
@@ -174,31 +182,51 @@ class Scheduler:
         if not allowed:
             return False, retry_after
 
-        task = asyncio.create_task(self.execute_scan(m))
+        self._reserved_market = m
+        self.state.is_scanning[m] = True
+        self.state.last_scan_started_at[m] = self.clock.now()
+        task = asyncio.create_task(self._run_reserved_scan(m))
         self._bg_tasks.add(task)               # keep a ref so it isn't GC'd
         task.add_done_callback(self._bg_tasks.discard)
         return True, None
+
+    def wake(self) -> None:
+        """Re-evaluate scheduled deadlines after runtime settings change."""
+        self._trigger_event.set()
+
+    async def _run_reserved_scan(self, market: str) -> bool:
+        """Transfer the synchronous manual reservation to the shared scan lock."""
+        self._reserved_market = None
+        try:
+            return await self.execute_scan(market)
+        finally:
+            self.state.is_scanning[market] = False
 
     async def _run_loop(self) -> None:
         """Main scheduler loop enforcing startup scans, market-hours gating, and post-close runs."""
         # 1. Mandatory scan at startup for all enabled markets
         logger.info(f"Executing startup scans for {self.config.enabled_markets_list}...")
         for market in self.config.enabled_markets_list:
+            if self._stop_event.is_set():
+                return
             if self.universes.get(market):
-                ok = await self.execute_scan(market)
+                await self.execute_scan(market)
                 cal = self.calendars.get(market)
-                if ok and cal and not cal.is_market_open(self.clock.now()):
+                if cal and not cal.is_market_open(self.clock.now()):
                     now = self.clock.now()
                     local_date_str = cal.to_exchange_local(now).strftime("%Y-%m-%d")
                     if cal.calendar.is_session(local_date_str):
                         close_ts = cal.calendar.session_close(cal.calendar.date_to_session(local_date_str))
-                        if now >= close_ts + timedelta(minutes=self.config.MARKET_CLOSE_SCAN_DELAY_MIN):
+                        target = close_ts + timedelta(minutes=self.config.MARKET_CLOSE_SCAN_DELAY_MIN)
+                        completed = self.state.last_scan_completed_at.get(market)
+                        if completed is not None and completed >= target:
                             self._post_close_done[market] = local_date_str
 
         while not self._stop_event.is_set():
-            now = self.clock.now()
-
             for market in self.config.enabled_markets_list:
+                if self._stop_event.is_set():
+                    return
+                now = self.clock.now()
                 cal = self.calendars.get(market)
                 if not cal:
                     continue
@@ -206,12 +234,12 @@ class Scheduler:
                 is_open = cal.is_market_open(now)
 
                 if is_open:
-                    # If open, check if time since last scan >= effective interval
-                    last_started = self.state.last_scan_started_at.get(market)
-                    eff_int = self.state.effective_interval_sec(market)
+                    # Measure the interval from completion, including failed scans
+                    last_completed = self.state.last_scan_completed_at.get(market)
+                    eff_int = self.state.get_effective_interval_sec(market)
                     if (
-                        last_started is None
-                        or (now - last_started).total_seconds() >= eff_int
+                        last_completed is None
+                        or (now - last_completed).total_seconds() >= eff_int
                     ):
                         await self.execute_scan(market)
                 else:
@@ -225,6 +253,9 @@ class Scheduler:
                         post_close_target = close_ts + timedelta(
                             minutes=self.config.MARKET_CLOSE_SCAN_DELAY_MIN
                         )
+                        completed = self.state.last_scan_completed_at.get(market)
+                        if completed is not None and completed >= post_close_target:
+                            self._post_close_done[market] = local_date_str
 
                         now_ts = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
                         if (
@@ -235,7 +266,9 @@ class Scheduler:
                                 f"[{market}] Triggering scheduled post-close scan "
                                 f"({self.config.MARKET_CLOSE_SCAN_DELAY_MIN}m after close)..."
                             )
-                            if await self.execute_scan(market):
+                            await self.execute_scan(market)
+                            completed = self.state.last_scan_completed_at.get(market)
+                            if completed is not None and completed >= post_close_target:
                                 self._post_close_done[market] = local_date_str
 
             # Sleep 15s or until manual trigger/stop

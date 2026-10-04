@@ -2,9 +2,11 @@
 
 A robust, local-first, single-user stock screening pipeline that identifies and ranks equities satisfying technical momentum, volume breakout, and value fundamentals:
 
-- **RSI(14) > 50** (`MIN_RSI`)
-- **Latest Volume > 2x** 20-day average volume (`MIN_VOLUME_RATIO` x 20-session SMA)
-- **Trailing P/E < 20** (`MAX_PE`)
+- **RSI(14) > 40** (`MIN_RSI`), non-decreasing when `REQUIRE_RSI_TREND_UP=true`
+- **Volume ratio > 1.5x** previous 20-session average; partial sessions use bounded linear projection (`MIN_VOLUME_PROJECTION_ELAPSED=0.25`)
+- **-500 <= trailing P/E < 50** (`MIN_PE`/`MAX_PE`); non-positive values have zero valuation score
+
+The valuation score peaks at configurable `OPTIMAL_PE=10`. Observed volume remains unchanged; intraday projection assumes a constant trading rate and can overestimate or underestimate closing volume.
 
 Equities meeting all screening criteria are ranked via a stable composite score combining volume breakout, RSI momentum, and attractive valuation.
 
@@ -44,6 +46,8 @@ Equities meeting all screening criteria are ranked via a stable composite score 
          | (Throttling & Backoff)|                 |   for offline & tests)|
          +-----------------------+                 +-----------------------+
 ```
+
+The NSE calendar uses the available `XBOM` proxy from exchange_calendars; NSE-specific session differences may require a dedicated calendar. Atomic versioned JSON snapshots retain each latest successful scan; SQLite provides historical records and legacy restore. `data_as_of` records the fetched bar date, while `last_refreshed` records scan completion. Request counts measure ticker/provider attempts including retries, not internal HTTP requests.
 
 ### Key Architectural Pillars
 - **Decoupled Engine & UI:** The Streamlit UI communicates strictly via FastAPI REST endpoints. No internal engine imports or direct scans from the frontend.
@@ -90,8 +94,10 @@ Equities meeting all screening criteria are ranked via a stable composite score 
 
 ### 1. Setup Environment
 ```bash
-pip install -r requirements.txt
-cp .env.example .env
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
 ### 2. Run CLI Scanner
@@ -120,7 +126,7 @@ Open browser at `http://localhost:8501`.
 
 ### 5. Run Test Suite
 ```bash
-pytest -v
+python -m pytest -v
 ```
 
 ---

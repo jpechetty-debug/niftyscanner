@@ -50,13 +50,16 @@ class ScanStateManager:
         all_markets = set(self.config.enabled_markets_list) | set(self.calendars.keys())
         self.markets = sorted(list(all_markets))
 
-        # Single flight scan lock per market
-        self.scan_locks: Dict[str, asyncio.Lock] = {m: asyncio.Lock() for m in self.markets}
+        # One shared single-flight lock across enabled markets
+        self._scan_lock = asyncio.Lock()
+        self.scan_locks: Dict[str, asyncio.Lock] = {m: self._scan_lock for m in self.markets}
         self.is_scanning: Dict[str, bool] = {m: False for m in self.markets}
 
         # Last scan timing per market
         self.last_scan_started_at: Dict[str, Optional[datetime]] = {m: None for m in self.markets}
         self.last_successful_scan_at: Dict[str, Optional[datetime]] = {m: None for m in self.markets}
+        self.last_scan_completed_at: Dict[str, Optional[datetime]] = {m: None for m in self.markets}
+        self.data_as_of: Dict[str, str] = {m: "" for m in self.markets}
         self.last_scan_seconds: Dict[str, float] = {m: 0.0 for m in self.markets}
         self.last_scan_failed: Dict[str, bool] = {m: False for m in self.markets}
         self.last_scan_request_count: Dict[str, int] = {m: 0 for m in self.markets}
@@ -88,6 +91,7 @@ class ScanStateManager:
                     raw_funnel = meta.get("funnel", {})
                     self.funnel_store[market] = FunnelCounts(**raw_funnel)
 
+                    self.data_as_of[market] = meta.get("data_as_of", "")
                     self.last_scan_seconds[market] = meta.get("scan_seconds", 0.0)
                     self.last_scan_request_count[market] = meta.get("request_count", 0)
 
@@ -103,9 +107,8 @@ class ScanStateManager:
 
     @property
     def scan_lock(self) -> asyncio.Lock:
-        """Convenience property for primary market scan lock."""
-        first_m = self.markets[0]
-        return self.scan_locks[first_m]
+        """Global single-flight lock shared by every market."""
+        return self._scan_lock
 
     @property
     def effective_interval_sec(self) -> int:
@@ -182,11 +185,15 @@ class ScanStateManager:
         failures: List[FailedSymbolItem],
         scan_seconds: float,
         request_count: int,
+        data_as_of: str = "",
+        persist: bool = True,
     ) -> None:
         """Store successful scan results and persist atomically to disk."""
         m = market.upper()
         now = self.clock.now()
         self.last_successful_scan_at[m] = now
+        self.last_scan_completed_at[m] = now
+        self.data_as_of[m] = data_as_of
         self.last_scan_seconds[m] = scan_seconds
         self.last_scan_request_count[m] = request_count
         self.last_scan_failed[m] = False
@@ -196,6 +203,12 @@ class ScanStateManager:
         self.funnel_store[m] = funnel
         self.failures_store[m] = failures
 
+        if persist:
+            self.persist_last_scan(m)
+
+    def persist_last_scan(self, market: str) -> None:
+        """Persist a snapshot; scheduler calls this in a worker thread."""
+        m = market.upper()
         payload = self.get_results_payload(m)
         try:
             save_last_scan(market=m, payload=payload)
@@ -214,9 +227,30 @@ class ScanStateManager:
         self.last_scan_seconds[m] = scan_seconds
         self.last_scan_request_count[m] = request_count
         self.last_scan_failed[m] = True
+        self.last_scan_completed_at[m] = self.clock.now()
 
         self.failures_store[m] = failures   # replace, don't append (unbounded growth)
         logger.warning(f"Scan for {m} failed. Retaining prior results with stale=True.")
+
+    def get_next_refresh_at(self, market: str) -> Optional[datetime]:
+        """Stable completion-based deadline, including today's one post-close scan."""
+        m = market.upper()
+        if self.is_scanning.get(m, False):
+            return None
+        now = self.clock.now()
+        cal = self.calendars[m]
+        local_date = cal.to_exchange_local(now).strftime("%Y-%m-%d")
+        if not cal.calendar.is_session(local_date):
+            return None
+        close = cal.calendar.session_close(cal.calendar.date_to_session(local_date)).to_pydatetime()
+        target = close + timedelta(minutes=self.config.MARKET_CLOSE_SCAN_DELAY_MIN)
+        completed = self.last_scan_completed_at.get(m)
+        if cal.is_market_open(now):
+            if completed is None:
+                return None
+            deadline = completed + timedelta(seconds=self.get_effective_interval_sec(m))
+            return deadline if deadline <= close else target
+        return target if completed is None or completed < target else None
 
     def get_results_payload(self, market: str) -> Dict[str, Any]:
         """Construct full JSON response format required by Section 17 for a market."""
@@ -224,7 +258,7 @@ class ScanStateManager:
         now = self.clock.now()
         is_stale, stale_reasons = self.evaluate_stale(m)
 
-        cal = self.calendars.get(m, MarketCalendar(m))
+        cal = self.calendars[m]
         is_open = cal.is_market_open(now)
         market_status_str = "open" if is_open else "closed"
 
@@ -232,11 +266,8 @@ class ScanStateManager:
         last_ref_str = last_ref.isoformat() if last_ref else ""
 
         eff_int = self.get_effective_interval_sec(m)
-        if is_open:
-            next_dt = now + timedelta(seconds=eff_int)
-            next_refresh_str: Optional[str] = next_dt.isoformat()
-        else:
-            next_refresh_str = None
+        next_dt = self.get_next_refresh_at(m)
+        next_refresh_str = next_dt.isoformat() if next_dt else None
 
         funnel = self.funnel_store.get(m, FunnelCounts())
         results = self.results_store.get(m, [])
@@ -247,7 +278,7 @@ class ScanStateManager:
             "market_status": market_status_str,
             "stale": is_stale,
             "stale_reasons": stale_reasons,
-            "data_as_of": last_ref_str,
+            "data_as_of": self.data_as_of.get(m, ""),
             "last_refreshed": last_ref_str,
             "next_refresh_at": next_refresh_str,
             "effective_interval_sec": eff_int,
@@ -267,7 +298,7 @@ class ScanStateManager:
         m = market.upper()
         now = self.clock.now()
         is_stale, stale_reasons = self.evaluate_stale(m)
-        cal = self.calendars.get(m, MarketCalendar(m))
+        cal = self.calendars[m]
 
         last_ref = self.last_successful_scan_at.get(m)
         return {
@@ -281,4 +312,5 @@ class ScanStateManager:
             "effective_interval_sec": self.get_effective_interval_sec(m),
             "last_scan_seconds": self.last_scan_seconds.get(m, 0.0),
             "last_refreshed": last_ref.isoformat() if last_ref else None,
+            "next_refresh_at": (deadline.isoformat() if (deadline := self.get_next_refresh_at(m)) else None),
         }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 from datetime import datetime
@@ -83,10 +84,11 @@ async def trigger_refresh(
 
     allowed, retry_after = scheduler.trigger_immediate_scan(market_valid)
     if not allowed:
-        headers = {"Retry-After": str(retry_after or config.REFRESH_COOLDOWN_SEC)}
+        retry_after = retry_after or config.REFRESH_COOLDOWN_SEC
+        headers = {"Retry-After": str(retry_after)}
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Scan already active or cooldown period in effect.",
+            detail={"message": "Scan already active or cooldown period in effect.", "retry_after": retry_after},
             headers=headers,
         )
 
@@ -132,7 +134,7 @@ async def export_csv(
         writer.writerow({k: item.get(k) for k in fieldnames})
 
     csv_data = output.getvalue()
-    filename = f"screener_{market_valid}_{datetime.now().strftime('%Y%m%d')}.csv"
+    filename = f"screener_{market_valid}_{request.app.state.clock.now().strftime('%Y%m%d')}.csv"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
 
     return Response(content=csv_data, media_type="text/csv", headers=headers)
@@ -150,10 +152,9 @@ async def update_settings(update: SettingsUpdateRequest, request: Request):
     """Update runtime refresh interval immediately and persist atomically to disk."""
     config = request.app.state.config
 
-    # Apply immediately in-memory
+    # Persist first so a failed write cannot silently change runtime settings.
+    await asyncio.to_thread(save_settings_file, {"REFRESH_INTERVAL_SEC": update.refresh_interval_sec})
     config.REFRESH_INTERVAL_SEC = update.refresh_interval_sec
-
-    # Persist atomically to data/settings.json per Section 14
-    save_settings_file({"REFRESH_INTERVAL_SEC": update.refresh_interval_sec})
+    request.app.state.scheduler.wake()
 
     return SettingsResponse(refresh_interval_sec=config.REFRESH_INTERVAL_SEC)

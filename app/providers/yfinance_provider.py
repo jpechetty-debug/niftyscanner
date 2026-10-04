@@ -9,12 +9,13 @@ Notes:
 from __future__ import annotations
 
 import concurrent.futures
-import math
+import threading
 import random
 from typing import Dict, List, Optional, Tuple
 from loguru import logger
 import pandas as pd
 import yfinance as yf
+from yfinance.exceptions import YFRateLimitError
 
 from app.cache.pe_cache import PECache
 from app.cache.bar_cache import BarCache
@@ -40,6 +41,8 @@ class YFinanceProvider(MarketDataProvider):
         self.config = config
         self.clock = clock or SystemClock()
         self.total_requests = 0
+        self._pe_lock = threading.Lock()
+        self._pe_abort = threading.Event()
 
         self.download_breaker = download_breaker or CircuitBreaker(
             name="download",
@@ -53,7 +56,7 @@ class YFinanceProvider(MarketDataProvider):
             cooldown_sec=config.BREAKER_COOLDOWN_SEC,
             clock=self.clock,
         )
-        self.pe_cache = pe_cache or PECache(
+        self.pe_cache = pe_cache if pe_cache is not None else PECache(
             ttl_hours=config.PE_CACHE_TTL_HOURS,
             clock=self.clock,
         )
@@ -63,8 +66,8 @@ class YFinanceProvider(MarketDataProvider):
     def _fail_all(
         tickers: List[str], stage: Stage, code: FailureCode, message: str
     ) -> List[FailedSymbolItem]:
-        """One failure per affected symbol so funnel.failed reflects real symbol counts."""
-        return [FailedSymbolItem(ticker=t, stage=stage, code=code, message=message) for t in tickers]
+        """Aggregate a systemic failure while retaining the affected-symbol count."""
+        return [FailedSymbolItem(ticker="*", stage=stage, code=code, message=message, affected_count=len(tickers))]
 
     def _extract_ticker_df(self, chunk_df: pd.DataFrame, ticker: str) -> Optional[pd.DataFrame]:
         """Extract a single ticker's DataFrame handling MultiIndex and flat columns."""
@@ -87,173 +90,98 @@ class YFinanceProvider(MarketDataProvider):
             # Flat columns - single ticker download
             return chunk_df.copy()
 
-    def download_bars(
-        self, tickers: List[str]
-    ) -> Tuple[Dict[str, pd.DataFrame], int, List[FailedSymbolItem]]:
-        """Download daily bars in sequential chunks with delay, jitter, and circuit breaker."""
+    @staticmethod
+    def _is_systemic_error(error: Exception) -> bool:
+        """Recognize rate limits and transport errors without retrying bad inputs."""
+        return isinstance(error, (YFRateLimitError, TimeoutError, ConnectionError, OSError)) or any(
+            text in str(error).lower() for text in ("rate limit", "429", "timeout", "timed out", "crumb", "unauthorized", "connection", "network")
+        )
+
+    def _download_group(self, tickers: List[str], period: str) -> Tuple[Optional[pd.DataFrame], int, Optional[FailureCode], Optional[str]]:
+        """Retry one download group; count ticker requests on every attempt."""
+        count = 0
+        code = FailureCode.DOWNLOAD_ERROR
+        message = "Download failed"
+        for attempt in range(self.config.MAX_RETRIES):
+            if not self.download_breaker.is_available():
+                return None, count, FailureCode.CIRCUIT_OPEN, "Download circuit breaker is open"
+            try:
+                count += len(tickers)
+                self.total_requests += len(tickers)
+                frame = yf.download(tickers=tickers, period=period, interval="1d",
+                                    auto_adjust=True, threads=self.config.DOWNLOAD_THREADS, progress=False)
+                if frame is None or frame.empty:
+                    code, message = FailureCode.EMPTY_CHUNK, "Empty DataFrame returned from yf.download"
+                else:
+                    missing = sum(
+                        (df is None or df.empty or "Close" not in df or df["Close"].isna().all())
+                        for df in (self._extract_ticker_df(frame, ticker) for ticker in tickers)
+                    )
+                    if missing / len(tickers) <= 0.5:
+                        self.download_breaker.record_success()
+                        return frame, count, None, None
+                    code, message = FailureCode.EMPTY_CHUNK, "More than 50% of symbols have no Close data"
+            except Exception as error:
+                code = FailureCode.THROTTLED if isinstance(error, YFRateLimitError) else FailureCode.DOWNLOAD_ERROR
+                message = str(error)
+                if not self._is_systemic_error(error):
+                    self.download_breaker.record_success()
+                    return None, count, code, message
+            self.download_breaker.record_systemic_failure(message)
+            if self.download_breaker.state == CircuitState.OPEN or attempt + 1 == self.config.MAX_RETRIES:
+                break
+            self.clock.sleep(2**attempt + random.uniform(0.1, 0.5))
+        return None, count, code, message
+
+    def download_bars(self, tickers: List[str]) -> Tuple[Dict[str, pd.DataFrame], int, List[FailedSymbolItem]]:
+        """Download sequential chunks, aborting on a tripped breaker."""
         results: Dict[str, pd.DataFrame] = {}
         failures: List[FailedSymbolItem] = []
-        request_count = 0
-
-        # Check circuit breaker before initiating download
-        if not self.download_breaker.is_available():
-            logger.error("Download circuit breaker is OPEN. Aborting price scan.")
-            failures.extend(
-                self._fail_all(
-                    tickers, Stage.DOWNLOAD, FailureCode.CIRCUIT_OPEN,
-                    f"Download circuit breaker is {self.download_breaker.state.value}. Aborting scan.",
-                )
-            )
-            return results, 0, failures
-
-        chunk_size = self.config.CHUNK_SIZE
-        chunks = [tickers[i : i + chunk_size] for i in range(0, len(tickers), chunk_size)]
-
+        count = 0
+        chunks = [tickers[i:i + self.config.CHUNK_SIZE] for i in range(0, len(tickers), self.config.CHUNK_SIZE)]
         for idx, chunk in enumerate(chunks):
-            # Check circuit breaker between chunks (chunk 0 was already checked above;
-            # a second is_available() call would consume the HALF_OPEN trial and deadlock)
-            if idx > 0 and not self.download_breaker.is_available():
-                logger.error("Download circuit breaker tripped OPEN mid-scan. Aborting remaining chunks.")
-                remaining = [t for c in chunks[idx:] for t in c]
-                failures.extend(
-                    self._fail_all(
-                        remaining, Stage.DOWNLOAD, FailureCode.CIRCUIT_OPEN,
-                        f"Download circuit breaker opened during chunk {idx+1}/{len(chunks)}.",
-                    )
-                )
-                break
-
-            # Chunk delay with jitter between chunks
-            if idx > 0:
-                jitter = random.uniform(
-                    self.config.CHUNK_DELAY_MIN_SEC, self.config.CHUNK_DELAY_MAX_SEC
-                )
-                self.clock.sleep(jitter)
-
-            chunk_reqs = len(chunk)
-            request_count += chunk_reqs
-            self.total_requests += chunk_reqs
-
-            chunk_df = None
-            last_err = None
-
-            needs_full = []
-            needs_delta = []
-            
-            for t in chunk:
-                if self.bar_cache.get_bars(t) is not None:
-                    needs_delta.append(t)
+            if idx:
+                self.clock.sleep(random.uniform(self.config.CHUNK_DELAY_MIN_SEC, self.config.CHUNK_DELAY_MAX_SEC))
+            groups = [
+                ([t for t in chunk if self.bar_cache.get_bars(t) is None], "6mo"),
+                ([t for t in chunk if self.bar_cache.get_bars(t) is not None], "5d"),
+            ]
+            for group, period in groups:
+                if not group:
+                    continue
+                frame, attempts, code, message = self._download_group(group, period)
+                count += attempts
+                if code is not None:
+                    if code != FailureCode.CIRCUIT_OPEN:
+                        failures.extend(self._fail_all(group, Stage.DOWNLOAD, code,
+                            f"Chunk {idx+1}/{len(chunks)} ({len(group)} symbols): {message}"))
                 else:
-                    needs_full.append(t)
-                    
-            chunk_df_full = None
-            chunk_df_delta = None
-            last_err = None
-
-            for attempt in range(self.config.MAX_RETRIES):
-                try:
-                    if needs_full:
-                        chunk_df_full = yf.download(
-                            tickers=needs_full,
-                            period="6mo",
-                            interval="1d",
-                            auto_adjust=True,
-                            threads=self.config.DOWNLOAD_THREADS,
-                            progress=False,
-                        )
-                    if needs_delta:
-                        chunk_df_delta = yf.download(
-                            tickers=needs_delta,
-                            period="5d",
-                            interval="1d",
-                            auto_adjust=True,
-                            threads=self.config.DOWNLOAD_THREADS,
-                            progress=False,
-                        )
-                    # Check if empty frame was returned without raising
-                    if (needs_full and (chunk_df_full is None or chunk_df_full.empty)) or \
-                       (needs_delta and (chunk_df_delta is None or chunk_df_delta.empty)):
-                        last_err = "Empty DataFrame returned from yf.download"
-                        backoff = (2**attempt) + random.uniform(0.1, 0.5)
-                        self.clock.sleep(backoff)
-                        continue
-                    break
-                except Exception as e:
-                    last_err = str(e)
-                    backoff = (2**attempt) + random.uniform(0.1, 0.5)
-                    self.clock.sleep(backoff)
-
-            # Check for systemic chunk failure
-            if (needs_full and (chunk_df_full is None or chunk_df_full.empty)) or \
-               (needs_delta and (chunk_df_delta is None or chunk_df_delta.empty)):
-                self.download_breaker.record_systemic_failure(
-                    f"Chunk {idx+1} failed after {self.config.MAX_RETRIES} retries: {last_err}"
-                )
-                failures.extend(
-                    self._fail_all(
-                        chunk, Stage.DOWNLOAD,
-                        FailureCode.EMPTY_CHUNK if "Empty" in str(last_err) else FailureCode.DOWNLOAD_ERROR,
-                        f"Chunk {idx+1}/{len(chunks)} ({len(chunk)} symbols) failed: {last_err}",
-                    )
-                )
-                continue
-
-            all_nan_count = 0
-            for ticker in chunk:
-                source_df = chunk_df_delta if ticker in needs_delta else chunk_df_full
-                t_df = self._extract_ticker_df(source_df, ticker)
-                if t_df is None or ("Close" in t_df.columns and t_df["Close"].isna().all()):
-                    all_nan_count += 1
-
-            if len(chunk) > 2 and (all_nan_count / len(chunk)) > 0.50:
-                self.download_breaker.record_systemic_failure(
-                    f"Chunk {idx+1} had {all_nan_count}/{len(chunk)} all-NaN symbols (>50%)"
-                )
-            else:
-                self.download_breaker.record_success()
-
-            # Process individual symbols in chunk
-            for ticker in chunk:
-                source_df = chunk_df_delta if ticker in needs_delta else chunk_df_full
-                ticker_df = self._extract_ticker_df(source_df, ticker)
-                if ticker_df is None or ticker_df.empty:
-                    failures.append(
-                        FailedSymbolItem(
-                            ticker=ticker,
-                            stage=Stage.DOWNLOAD,
-                            code=FailureCode.DELISTED,
-                            message="No data returned in chunk, possibly delisted or symbol mismatch",
-                        )
-                    )
-                elif "Close" in ticker_df.columns and ticker_df["Close"].isna().all():
-                    failures.append(
-                        FailedSymbolItem(
-                            ticker=ticker,
-                            stage=Stage.DOWNLOAD,
-                            code=FailureCode.DELISTED,
-                            message="All Close prices returned are NaN, possibly delisted",
-                        )
-                    )
-                else:
-                    if ticker in needs_delta and not self.bar_cache.is_consistent(ticker, ticker_df):
-                        # History was retroactively adjusted (split/dividend): re-pull full history.
-                        logger.info(f"{ticker}: price adjustment detected, refetching full history")
-                        self.bar_cache.invalidate(ticker)
-                        try:
-                            request_count += 1
-                            full = yf.download(
-                                tickers=[ticker], period="6mo", interval="1d",
-                                auto_adjust=True, progress=False,
-                            )
-                            refetched = self._extract_ticker_df(full, ticker)
-                            if refetched is not None and not refetched.empty:
-                                ticker_df = refetched
-                        except Exception as e:
-                            logger.warning(f"{ticker}: full refetch failed: {e}")
-                    ticker_df = self.bar_cache.update_bars(ticker, ticker_df)
-                    results[ticker] = ticker_df
-
-        return results, request_count, failures
+                    for ticker in group:
+                        bars = self._extract_ticker_df(frame, ticker)
+                        if bars is None or bars.empty or "Close" not in bars or bars["Close"].isna().all():
+                            failures.append(FailedSymbolItem(ticker=ticker, stage=Stage.DOWNLOAD,
+                                code=FailureCode.DELISTED, message="No data returned, possibly delisted or symbol mismatch"))
+                            continue
+                        if period == "5d" and not self.bar_cache.is_consistent(ticker, bars):
+                            self.bar_cache.invalidate(ticker)
+                            full, attempts, refetch_code, refetch_message = self._download_group([ticker], "6mo")
+                            count += attempts
+                            if refetch_code is not None:
+                                if refetch_code != FailureCode.CIRCUIT_OPEN:
+                                    failures.append(FailedSymbolItem(ticker=ticker, stage=Stage.DOWNLOAD,
+                                        code=refetch_code, message=f"Adjustment refetch failed: {refetch_message}"))
+                                if self.download_breaker.state == CircuitState.OPEN:
+                                    break
+                                continue
+                            bars = self._extract_ticker_df(full, ticker)
+                        results[ticker] = self.bar_cache.update_bars(ticker, bars)
+                if self.download_breaker.state == CircuitState.OPEN or code == FailureCode.CIRCUIT_OPEN:
+                    remaining = max(0, len(tickers) - len(results) - sum(f.affected_count for f in failures))
+                    failures.append(FailedSymbolItem(ticker="*", stage=Stage.DOWNLOAD,
+                        code=FailureCode.CIRCUIT_OPEN, affected_count=remaining,
+                        message=f"Download circuit opened at chunk {idx+1}/{len(chunks)}; {remaining} symbols skipped"))
+                    return results, count, failures
+        return results, count, failures
 
     def _fetch_single_pe(
         self, ticker: str
@@ -281,83 +209,78 @@ class YFinanceProvider(MarketDataProvider):
 
         except Exception as e:
             # Check for systemic error indicators (rate limit / network issues)
-            err_str = str(e).lower()
-            is_systemic = any(s in err_str for s in ["rate", "429", "timeout", "crumb", "unauthorized", "connection"])
+            is_systemic = self._is_systemic_error(e)
             return ticker, None, FailureCode.PE_FETCH_FAILED, f"Error fetching Ticker.info: {e}", is_systemic
 
-    def fetch_pe_batch(
-        self, tickers: List[str]
-    ) -> Tuple[Dict[str, float], int, List[FailedSymbolItem]]:
-        """Fetch trailing P/E using cache, thread pool, and PE circuit breaker."""
+    def _fetch_pe_with_retries(self, ticker: str) -> Tuple[Tuple[str, Optional[float], Optional[FailureCode], Optional[str], bool], int]:
+        """Reserve each attempt under a lock, including the single half-open trial."""
+        count = 0
+        for attempt in range(self.config.MAX_RETRIES):
+            with self._pe_lock:
+                if self._pe_abort.is_set() or not self.pe_breaker.is_available():
+                    return (ticker, None, FailureCode.CIRCUIT_OPEN, "P/E circuit is open", True), count
+                count += 1
+                self.total_requests += 1
+            outcome = self._fetch_single_pe(ticker)
+            _, _, _, message, systemic = outcome
+            with self._pe_lock:
+                if systemic:
+                    self.pe_breaker.record_systemic_failure(message or "P/E transport error")
+                elif self.pe_breaker.state != CircuitState.OPEN:
+                    self.pe_breaker.record_success()
+                opened = self.pe_breaker.state == CircuitState.OPEN
+                if opened:
+                    self._pe_abort.set()
+            if not systemic or opened or attempt + 1 == self.config.MAX_RETRIES:
+                return outcome, count
+            self.clock.sleep(2**attempt + random.uniform(0.1, 0.5))
+        raise RuntimeError("Unreachable retry state")
+
+    def fetch_pe_batch(self, tickers: List[str]) -> Tuple[Dict[str, float], int, List[FailedSymbolItem]]:
+        """Fetch bounded batches; stop dispatch on breaker opening and retain failures."""
         results: Dict[str, float] = {}
         failures: List[FailedSymbolItem] = []
-        request_count = 0
-
-        tickers_to_fetch: List[str] = []
-
-        # 1. Check in-memory P/E cache first
+        pending: List[str] = []
+        count = 0
         for ticker in tickers:
-            hit, cached_val, cached_code = self.pe_cache.get(ticker)
-            if hit:
-                if cached_code is not None:
-                    failures.append(
-                        FailedSymbolItem(
-                            ticker=ticker,
-                            stage=Stage.PE,
-                            code=cached_code,
-                            message="Cached missing P/E",
-                        )
-                    )
-                elif cached_val is not None:
-                    results[ticker] = cached_val
-            else:
-                tickers_to_fetch.append(ticker)
-
-        if not tickers_to_fetch:
-            return results, 0, failures
-
-        # 2. Check PE circuit breaker before network calls
-        if not self.pe_breaker.is_available():
-            logger.error("P/E circuit breaker is OPEN. Aborting fundamental fetch.")
-            failures.extend(
-                self._fail_all(
-                    tickers_to_fetch, Stage.PE, FailureCode.CIRCUIT_OPEN,
-                    f"P/E circuit breaker is {self.pe_breaker.state.value}. Aborting P/E stage.",
-                )
-            )
-            return results, 0, failures
-
-        workers = min(self.config.PE_WORKERS, len(tickers_to_fetch))
-        request_count = len(tickers_to_fetch)
-        self.total_requests += request_count
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(self._fetch_single_pe, ticker) for ticker in tickers_to_fetch]
-            for future in concurrent.futures.as_completed(futures):
-                ticker, pe_val, fail_code, fail_msg, is_systemic = future.result()
-
-                if fail_code is not None:
-                    if is_systemic:
-                        self.pe_breaker.record_systemic_failure(fail_msg or "Systemic P/E error")
-                    else:
-                        # Endpoint responded (MISSING_PE / INVALID_PE): not a systemic fault.
-                        self.pe_breaker.record_success()
-                    if fail_code == FailureCode.MISSING_PE:
-                        # MISSING_PE is cached (Section 14)
-                        self.pe_cache.set_missing_pe(ticker)
-                    # PE_FETCH_FAILED is NEVER cached (Section 14)
-
-                    failures.append(
-                        FailedSymbolItem(
-                            ticker=ticker,
-                            stage=Stage.PE,
-                            code=fail_code,
-                            message=fail_msg or "P/E acquisition failure",
-                        )
-                    )
-                elif pe_val is not None:
-                    self.pe_breaker.record_success()
-                    self.pe_cache.set_valid_pe(ticker, pe_val)
-                    results[ticker] = pe_val
-
-        return results, request_count, failures
+            hit, value, code = self.pe_cache.get(ticker)
+            if not hit:
+                pending.append(ticker)
+            elif code is not None:
+                failures.append(FailedSymbolItem(ticker=ticker, stage=Stage.PE, code=code, message="Cached missing P/E"))
+            elif value is not None:
+                results[ticker] = value
+        self._pe_abort.clear()
+        cursor = 0
+        completed = set()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.PE_WORKERS) as pool:
+            while cursor < len(pending):
+                if self._pe_abort.is_set() or self.pe_breaker.state == CircuitState.OPEN:
+                    self._pe_abort.set()
+                    break
+                width = 1 if self.pe_breaker.state == CircuitState.HALF_OPEN else self.config.PE_WORKERS
+                batch = pending[cursor:cursor + width]
+                cursor += len(batch)
+                futures = [pool.submit(self._fetch_pe_with_retries, ticker) for ticker in batch]
+                for future in concurrent.futures.as_completed(futures):
+                    outcome, attempts = future.result()
+                    count += attempts
+                    ticker, value, code, message, _ = outcome
+                    if code == FailureCode.CIRCUIT_OPEN:
+                        continue
+                    completed.add(ticker)
+                    if code is not None:
+                        failures.append(FailedSymbolItem(ticker=ticker, stage=Stage.PE, code=code, message=message or "P/E fetch failed"))
+                        if code == FailureCode.MISSING_PE:
+                            self.pe_cache.set_missing_pe(ticker)
+                    elif value is not None:
+                        self.pe_cache.set_valid_pe(ticker, value)
+                        results[ticker] = value
+                if self._pe_abort.is_set() or self.pe_breaker.state == CircuitState.OPEN:
+                    self._pe_abort.set()
+                    break
+        if self._pe_abort.is_set():
+            skipped = len(pending) - len(completed)
+            failures.append(FailedSymbolItem(ticker="*", stage=Stage.PE, code=FailureCode.CIRCUIT_OPEN,
+                affected_count=skipped, message=f"P/E circuit opened; {skipped} symbols skipped"))
+        return results, count, failures

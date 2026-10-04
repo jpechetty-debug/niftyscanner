@@ -31,7 +31,7 @@ def calculate_composite_score(
 
     p_clip = 0.0
     if pe > 0 and pe < config.MAX_PE:
-        optimal_pe = 10.0
+        optimal_pe = config.OPTIMAL_PE
         if pe <= optimal_pe:
             p_clip = pe / optimal_pe
         else:
