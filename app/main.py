@@ -19,6 +19,8 @@ from app.providers.yfinance_provider import YFinanceProvider
 from app.scheduler.runner import Scheduler
 from app.services.scanner import StockScannerService
 from app.services.state import ScanStateManager
+from app.performance.service import PerformanceService
+from app.performance.provider import YahooOutcomeProvider
 from app.universe.nse import NSEUniverse
 from app.universe.nyse import NYSEUniverse
 
@@ -107,6 +109,8 @@ def create_app(
         clock=clk,
     )
 
+    performance = PerformanceService(cfg, clk, calendars["NSE"],
+        YahooOutcomeProvider(cfg.PERFORMANCE_TIMEOUT_SEC, cfg.PERFORMANCE_DATA_DIR)) if "NSE" in calendars else None
     scheduler = Scheduler(
         config=cfg,
         scanner_services=scanner_services,
@@ -114,6 +118,7 @@ def create_app(
         universes=universes,
         calendars=calendars,
         clock=clk,
+        performance_service=performance,
     )
 
     @asynccontextmanager
@@ -150,8 +155,11 @@ def create_app(
     app.state.calendars = calendars
     app.state.state_manager = state_manager
     app.state.scheduler = scheduler
+    app.state.performance = performance
 
     app.include_router(router)
+    from app.performance.api import router as performance_router
+    app.include_router(performance_router)
     return app
 
 

@@ -120,6 +120,7 @@ def test_light_workspace_search_sort_and_empty_state(monkeypatch):
     monkeypatch.setattr(client, "get_status", lambda *a, **k: ({
         "market_status": {"is_open": False, "is_holiday": True}, "is_scanning": False}, None))
     monkeypatch.setattr(client, "get_settings", lambda *a, **k: (60, None))
+    monkeypatch.setattr(client, "get_performance", lambda *a, **k: ({"supported": False, "message": "SYNTHETIC test history unavailable."}, None))
     page = AppTest.from_file("ui/app.py").run()
     assert not page.exception
     assert len(page.dataframe[0].value) == 3
@@ -158,6 +159,7 @@ def terminal_page(monkeypatch):
     monkeypatch.setattr(client, "get_status", lambda *a, **k: ({
         "market_status": {"is_open": False, "is_holiday": True}, "is_scanning": False}, None))
     monkeypatch.setattr(client, "get_settings", lambda *a, **k: (60, None))
+    monkeypatch.setattr(client, "get_performance", lambda *a, **k: ({"supported": False, "message": "SYNTHETIC test history unavailable."}, None))
     return AppTest.from_file("ui/app.py"), response, client
 
 

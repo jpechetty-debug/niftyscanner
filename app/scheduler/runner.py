@@ -29,10 +29,12 @@ class Scheduler:
         calendar: Optional[MarketCalendar] = None,
         calendars: Optional[Union[MarketCalendar, Dict[str, MarketCalendar]]] = None,
         clock: Optional[Clock] = None,
+        performance_service=None,
     ) -> None:
         self.config = config
         self.state = state_manager
         self.clock = clock or SystemClock()
+        self.performance = performance_service
 
         # Handle scanners
         scanners_arg = scanner_services or scanner_service
@@ -75,6 +77,10 @@ class Scheduler:
         self._stop_event.clear()
         self._task = asyncio.create_task(self._run_loop(), name="scanner_scheduler_loop")
         logger.info(f"Background screening scheduler started for markets: {self.config.enabled_markets_list}")
+
+    @property
+    def is_running(self) -> bool:
+        return self._task is not None and not self._task.done() and not self._stopping
 
     async def stop(self) -> None:
         """Signal the scheduler to stop and await termination."""
@@ -273,9 +279,22 @@ class Scheduler:
                             if ok and completed is not None and completed >= post_close_target:
                                 self._post_close_done[market] = local_date_str
 
+            await self.evaluate_performance_if_idle()
             # Sleep 15s or until manual trigger/stop
             try:
                 await asyncio.wait_for(self._trigger_event.wait(), timeout=15.0)
                 self._trigger_event.clear()
             except asyncio.TimeoutError:
                 pass
+
+    async def evaluate_performance_if_idle(self):
+        """Scanning has priority; outcome downloads share the global provider lock."""
+        if not self.performance or self._reserved_market or self.state.scan_lock.locked():
+            return
+        if "NSE" in self.calendars and self.calendars["NSE"].is_market_open(self.clock.now()):
+            return
+        async with self.state.scan_lock:
+            try:
+                await asyncio.to_thread(self.performance.run_if_due)
+            except Exception as error:
+                logger.exception(f"Outcome evaluation failed: {error}")

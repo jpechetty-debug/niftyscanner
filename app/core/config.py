@@ -82,6 +82,37 @@ class Settings(BaseSettings):
     WEIGHT_PE: float = Field(default=0.25, ge=0, allow_inf_nan=False)
     LOG_LEVEL: str = "INFO"
 
+    # Forward signal evaluation (NSE price index; independent of live screening).
+    PERFORMANCE_ENABLED: bool = True
+    PERFORMANCE_DATA_DIR: str = "data"
+    PERFORMANCE_NIGHTLY_TIME: str = "21:00"
+    PERFORMANCE_BENCHMARK: str = "^CRSLDX"
+    PERFORMANCE_PRICE_BASIS: str = "yahoo_split_adjusted_price"
+    PERFORMANCE_BATCH_SIZE: int = Field(default=5, gt=0, le=100)
+    PERFORMANCE_RETRY_SEC: int = Field(default=300, gt=0)
+    PERFORMANCE_MAX_RETRIES: int = Field(default=3, gt=0, le=10)
+    PERFORMANCE_TIMEOUT_SEC: int = Field(default=10, gt=0, le=60)
+    PERFORMANCE_MIN_SAMPLE: int = Field(default=20, gt=0)
+    PERFORMANCE_SCORE_EDGES: str = "0,0.25,0.5,0.75,1"
+    PERFORMANCE_VOLUME_EDGES: str = "0,1.5,3,5,10"
+    PERFORMANCE_RSI_EDGES: str = "0,40,50,60,70,100"
+
+    @model_validator(mode="after")
+    def validate_performance(self) -> Settings:
+        from datetime import time
+        time.fromisoformat(self.PERFORMANCE_NIGHTLY_TIME)
+        if len(self.PERFORMANCE_NIGHTLY_TIME) != 5:
+            raise ValueError("PERFORMANCE_NIGHTLY_TIME must use HH:MM")
+        if not self.PERFORMANCE_BENCHMARK.strip() or not self.PERFORMANCE_DATA_DIR.strip():
+            raise ValueError("Performance benchmark and data directory cannot be empty")
+        if self.PERFORMANCE_PRICE_BASIS != "yahoo_split_adjusted_price":
+            raise ValueError("Unsupported performance price basis")
+        for key in ("PERFORMANCE_SCORE_EDGES", "PERFORMANCE_VOLUME_EDGES", "PERFORMANCE_RSI_EDGES"):
+            edges = [float(x) for x in getattr(self, key).split(",")]
+            if len(edges) < 2 or not all(math.isfinite(x) for x in edges) or any(a >= b for a, b in zip(edges, edges[1:])):
+                raise ValueError(f"{key} must contain increasing finite edges")
+        return self
+
     @property
     def enabled_markets_list(self) -> List[str]:
         """Return ENABLED_MARKETS as a list of uppercase stripped market names."""

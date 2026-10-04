@@ -295,7 +295,7 @@ def results_fragment(
     if not filtered.empty:
         best = filtered.sort_values(["score", "volume_ratio", "ticker"], ascending=[False, False, True]).iloc[0]
     render_summary(results, funnel, market, best)
-    results_tab, charts_tab, details_tab = st.tabs([f"Qualified stocks · {len(results)}", "Market insights", "Scan details"])
+    results_tab, charts_tab, details_tab, performance_tab = st.tabs([f"Qualified stocks · {len(results)}", "Market insights", "Scan details", "Performance"])
     with results_tab:
         if not results:
             st.info("No qualified stocks in this scan. Check Scan details for filtering and data issues.")
@@ -413,6 +413,9 @@ def results_fragment(
                 st.dataframe(pd.DataFrame(failures), width="stretch", hide_index=True)
         else:
             st.caption("No data issue records reported.")
+    with performance_tab:
+        from performance import render_performance
+        render_performance(api_client, market)
     st.divider()
     st.caption("For research purposes. Not financial advice.")
 

@@ -67,6 +67,9 @@ def _init_db(conn: sqlite3.Connection):
     """)
     conn.commit()
 
+    from app.performance.repository import migrate
+    migrate(conn)
+
 
 def atomic_write_json(file_path: Path | str, data: Dict[str, Any]) -> None:
     """Atomically write JSON data using a temporary file and replace."""
@@ -127,6 +130,8 @@ def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data")
             funnel.get("passed_pe", 0)
         ))
         scan_id = cursor.lastrowid
+        cursor.execute("UPDATE scans SET strategy_context = ? WHERE id = ?",
+                       (json.dumps(payload.get("strategy_context"), sort_keys=True), scan_id))
         
         signals = payload.get("results", [])
         for sig in signals:

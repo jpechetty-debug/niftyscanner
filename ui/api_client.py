@@ -38,6 +38,18 @@ class ScreenerApiClient:
         except Exception as e:
             return None, f"Network error fetching results: {e}"
 
+    def get_performance(self, market="NSE", horizon=5, start=None, end=None, strategy=None):
+        params = {"market": market, "horizon": horizon}
+        params.update({k: str(v) for k, v in {"start": start, "end": end, "strategy": strategy}.items() if v is not None})
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/performance", params=params)
+                if response.status_code == 200:
+                    return response.json(), None
+                return None, f"Performance unavailable (HTTP {response.status_code})."
+        except Exception as error:
+            return None, f"Unable to load performance: {error}"
+
     def get_status(self, market: str = "NSE") -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetch overall system status, breaker states, and staleness."""
         url = f"{self.base_url}/api/status"

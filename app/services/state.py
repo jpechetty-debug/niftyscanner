@@ -210,6 +210,8 @@ class ScanStateManager:
         """Persist a snapshot; scheduler calls this in a worker thread."""
         m = market.upper()
         payload = self.get_results_payload(m)
+        from app.performance.repository import strategy_context
+        payload["strategy_context"] = strategy_context(self.config)
         try:
             save_last_scan(market=m, payload=payload)
         except Exception as e:
