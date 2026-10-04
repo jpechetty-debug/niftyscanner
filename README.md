@@ -5,7 +5,7 @@ A robust, local-first, single-user stock screening pipeline that identifies and 
 - **RSI(14) > 40** (`MIN_RSI`), non-decreasing when `REQUIRE_RSI_TREND_UP=true`
 - **Volume ratio > 1.5x** previous 20-session average; partial sessions use bounded linear projection (`MIN_VOLUME_PROJECTION_ELAPSED=0.25`)
 - **1 <= trailing P/E < 50** (`MIN_PE`/`MAX_PE`); zero/negative values are filtered by default
-- **Average daily volume >= 100,000 shares** (`MIN_AVG_VOLUME`); configurable, including 0 to disable
+- **Average daily traded-value proxy >= ₹10 million for NSE / US$1 million for NYSE** (`MIN_AVG_TRADED_VALUE_NSE` / `MIN_AVG_TRADED_VALUE_NYSE`); configurable, including 0 to disable. The optional share floor (`MIN_AVG_VOLUME`) now defaults to 0.
 
 The valuation score peaks at configurable `OPTIMAL_PE=10`. Observed volume remains unchanged; intraday projection assumes a constant trading rate and can overestimate or underestimate closing volume.
 
@@ -15,7 +15,13 @@ Equities meeting all screening criteria are ranked via a stable composite score 
 
 SQLite history defaults to the first completed post-close capture per market, session and strategy (`HISTORY_MODE=canonical`). JSON snapshots still update on every successful scan. Set `HISTORY_INTRADAY_INTERVAL_SEC=1800` for optional half-hour samples, or `HISTORY_MODE=all` to retain every scan. Existing history is preserved. Run commands from the project root because configured data paths are relative.
 
-NYSE descriptions must identify common/ordinary shares or ADS/ADR, and exclude debt, funds and acquisition vehicles. This remains a configurable heuristic; genuine common stocks with `Trust` in their name are retained.
+NYSE plain company names are allowed. Configurable exclusions target debt, funds, acquisition vehicles, municipal instruments, opportunities vehicles and term/income trusts. Generic `Trust` and `Beneficial Interest` remain allowed for equity REITs. The retired `NYSE_REQUIRE_NAME_PATTERN` setting is ignored. Descriptions remain an imperfect instrument-classification heuristic.
+
+Liquidity uses the mean of paired daily Close × observed Volume over the previous completed `VOLUME_LOOKBACK` sessions, excluding the latest bar. It is a close-based estimate from adjusted Yahoo bars, not exchange VWAP turnover or a guarantee of execution. Each market uses its native currency; there is no FX conversion. Defaults are initial guardrails, not empirically tuned thresholds.
+
+Missing/null P/E with finite reported `trailingEps <= 0` is a normal profitability filter (`filtered_pe`), without inventing P/E. Missing P/E with unknown or positive EPS remains `MISSING_PE`: unavailable required data does not establish that the company is loss-making. Existing numeric P/E filters are unchanged.
+
+See [review corrections and verification limits](docs/REVIEW_CORRECTIONS.md). The [portable evidence archive](docs/evidence/review-evidence-2026-10-04.zip) includes a consistent history database backup, recorded real probes, constituent files and a network-free verifier. It records evidence from October 4, 2026; historical signals were not rewritten under new filters.
 
 ---
 

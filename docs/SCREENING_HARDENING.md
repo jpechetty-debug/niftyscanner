@@ -1,5 +1,7 @@
 # Screening and history hardening — 2026-10-04
 
+Historical phase report. Its mandatory equity wording rule and shared share-volume default are superseded by [review corrections](REVIEW_CORRECTIONS.md). Recorded source files, all benchmark sessions and a consistent SQLite snapshot are now included in the [portable evidence archive](evidence/review-evidence-2026-10-04.zip), with an offline verifier. Claims below describe checks performed during that earlier phase.
+
 ## Changes and review findings
 
 1. **Liquidity:** `MIN_AVG_VOLUME` defaults to 100,000 previous-session average shares instead of zero. Thin spikes are filtered normally, before P/E requests. This is an initial configurable guardrail, not a measured optimal threshold or a guarantee of next-open fills.

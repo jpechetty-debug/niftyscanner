@@ -64,7 +64,7 @@ A local-first, single-user stock screener that returns stocks meeting ALL of:
 - RSI(14) > MIN_RSI (40), and RSI is non-decreasing when REQUIRE_RSI_TREND_UP is enabled
 - Volume ratio > MIN_VOLUME_RATIO (1.5); intraday ratios use the bounded projection described in section 9
 - Finite trailing P/E in MIN_PE (1) <= P/E < MAX_PE (50); non-positive values are valid data but filtered by default. An explicit negative MIN_PE may admit them with zero valuation score.
-- Previous 20-session average volume >= MIN_AVG_VOLUME (100000); the floor is configurable and does not guarantee an executable next-open fill.
+- Previous 20-session mean daily Close × Volume >= MIN_AVG_TRADED_VALUE_NSE (10000000 INR) or MIN_AVG_TRADED_VALUE_NYSE (1000000 USD). Optional MIN_AVG_VOLUME defaults to 0; these configurable proxy floors do not guarantee an executable next-open fill.
 
 Data source: yfinance only. Markets: NSE Nifty 500 (Phases 1-3), NYSE (Phase 4) through the same Universe interface. Results are ranked by a stable composite score. Runs locally, bound to 127.0.0.1 by default.
 
@@ -173,7 +173,9 @@ No threshold is a literal in code. All values below are config with these defaul
 | MIN_VOLUME_PROJECTION_ELAPSED | 0.25 | projection denominator floor, in (0, 1] |
 | VOLUME_RATIO_CAP | 10 | score normalisation |
 | VOLUME_LOOKBACK | 20 | |
-| MIN_AVG_VOLUME | 100000 | 0 = off. Floor on avg20, for illiquid names |
+| MIN_AVG_VOLUME | 0 | Optional share-count floor on avg20; 0 = off |
+| MIN_AVG_TRADED_VALUE_NSE | 10000000 | INR mean daily Close × Volume over previous completed sessions; 0 = off |
+| MIN_AVG_TRADED_VALUE_NYSE | 1000000 | USD mean daily Close × Volume over previous completed sessions; 0 = off |
 | MAX_PE | 50 | strict `<` |
 | MIN_PE | 1 | inclusive lower bound; explicit override can admit non-positive values |
 | OPTIMAL_PE | 10 | valuation-score peak; 0 < OPTIMAL_PE < MAX_PE |
@@ -212,8 +214,8 @@ Never generate constituents from memory. If a required file is missing: STOP and
 - Keep `Exchange == N`. Exclude `ETF == Y` and `Test Issue == Y`.
 - The file has no instrument-type column, so excluding preferred shares, warrants, units and rights is a name/symbol heuristic:
   - symbol contains `$`, or ends with `.WS`, `.WSA`, `.WSB`, `.U`, `.UN`, `.RT`, `.R`
-  - name matches case-insensitive `\b(?:preferred|warrants?|units?|rights?|notes?|debentures?|bonds?|acquisition|funds?)\b`
-- Require a common/ordinary-share or ADS/ADR description (`NYSE_REQUIRE_NAME_PATTERN`). Generic `Trust` is not an exclusion: genuine equity REIT names contain it. Both name patterns are configurable and compiled at startup; descriptions remain a heuristic, not authoritative instrument classification.
+  - name matches case-insensitive `\b(?:preferred|warrants?|units?|rights?|notes?|debentures?|bonds?|acquisition|funds?|municipals?|opportunit(?:y|ies)|strats|corts)\b|\b(?:term|income)\s+trusts?\b|\b(?:BlackRock|Eaton\s+Vance|Gabelli|abrdn|John\s+Hancock|Royce|Franklin\s+Universal)\b.*\b(?:trusts?|beneficial\s+interest)\b|\bEaton\s+Vance\b.*\bcommon\s+(?:stock|shares?)\b|\bcapital\s+trust\b|\btax[- ]free\s+income\s+portfolio\b`
+- Do not require share-class wording; plain operating-company names are allowed. Generic `Trust` and `Beneficial Interest` are retained for REITs. `NYSE_EXCLUDE_NAME_PATTERN` is configurable and compiled at startup; the retired `NYSE_REQUIRE_NAME_PATTERN` is ignored. Descriptions remain a heuristic, not authoritative instrument classification.
 - Patterns live in config. Log the excluded count in total and per pattern. The heuristic has known false positives and negatives; document this.
 - Convert `BRK.B` to `BRK-B` for Yahoo. Use the same `Universe` interface as NSE.
 
@@ -256,6 +258,7 @@ Future providers must be swappable. Time-dependent code takes an injected `Clock
 - Any NaN in the 20-bar window -> `MISSING_VOLUME`. `avg20 == 0` -> `INVALID_VOLUME`.
 - When the bar is partial: `volume_ratio = current_volume / max(session_elapsed_fraction, MIN_VOLUME_PROJECTION_ELAPSED) / avg20`; otherwise `volume_ratio = current_volume / avg20`. `volume` always remains the observed value. The projection assumes a constant rate of trading and is not a prediction of closing volume.
 - If `MIN_AVG_VOLUME > 0` and `avg20 < MIN_AVG_VOLUME`: filtered out (funnel only).
+- The traded-value proxy is mean(previous completed sessions' Close × observed Volume), with the same lookback and latest-bar exclusion. No partial-session projection enters this estimate. It uses adjusted Yahoo closes, not VWAP turnover. Below the configured native-currency market floor: filtered_liquidity. Non-finite or non-positive completed-session prices are data failures. Older/custom indicator callers without paired-bar values fall back to avg20 × latest price.
 
 ## session_partial
 `session_partial = (latest bar date == exchange-local today) AND (market currently open)`. Exposed in results. Document in `AGENTS.md`: current-session volume is incomplete; partial-session volume ratios use a bounded linear projection and may overestimate or underestimate closing volume.
@@ -272,7 +275,8 @@ Future providers must be swappable. Time-dependent code takes an injected `Clock
 **Stage 2 (P/E, survivors only)**
 - Fetch `trailingPE` via `Ticker.info` in a thread pool (`PE_WORKERS`). Thread pool only here.
 - Rules:
-  - key absent -> `MISSING_PE` (failed; cached 24h)
+  - key absent/null and finite reported `trailingEps <= 0` -> confirmed non-positive earnings; normal `filtered_pe`, cached with P/E TTL. Provider returns an internal `NonPositiveEarnings` marker, never a fabricated P/E or result row.
+  - key absent/null with unknown, invalid or positive EPS -> `MISSING_PE` (failed; cached 24h); unavailable required data does not prove a company is loss-making
   - non-numeric, NaN, or inf -> `INVALID_PE` (failed); finite zero/negative values are valid inputs
   - fetch error -> `PE_FETCH_FAILED` (failed; NEVER cached; retried next scan)
   - `PE >= MAX_PE` or `PE < MIN_PE` -> filtered out (funnel only)
@@ -283,7 +287,7 @@ Future providers must be swappable. Time-dependent code takes an injected `Clock
 
 # 11. OUTCOMES: FILTERED vs FAILED
 
-**Filtered out (normal):** RSI not above `MIN_RSI`, volume ratio not above `MIN_VOLUME_RATIO`, `avg20 < MIN_AVG_VOLUME`, P/E out of range. Counted in `meta.funnel` only. Never in `failed_symbols`.
+**Filtered out (normal):** RSI not above `MIN_RSI`, volume ratio not above `MIN_VOLUME_RATIO`, liquidity below an enabled share/value floor, P/E out of range, or missing/null P/E with confirmed non-positive trailing EPS. Counted in `meta.funnel` only. Never in `failed_symbols`.
 
 **Failed (data problem):** recorded as `{ticker, stage, code, message}` in `failed_symbols`.
 - `stage` in: `universe | download | indicators | pe`

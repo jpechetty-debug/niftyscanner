@@ -23,6 +23,7 @@ class IndicatorResult:
     avg_volume_20d: float
     volume_ratio: float
     session_partial: bool
+    avg_traded_value_20d: Optional[float] = None
 
 
 def clean_and_validate_bars(
@@ -248,6 +249,13 @@ def compute_indicators(
     if vol_code is not None:
         return None, vol_code, vol_msg
 
+    # Close-based turnover proxy: paired completed sessions, never projected volume.
+    previous = cleaned_df.iloc[-1 - volume_lookback:-1]
+    traded_values = previous["Close"] * previous["Volume"]
+    if not np.isfinite(traded_values).all() or (previous["Close"] <= 0).any():
+        return None, FailureCode.UNKNOWN, "Invalid completed-session prices for traded-value estimate"
+    avg_traded_value = float(traded_values.mean())
+
     return (
         IndicatorResult(
             bar_date=latest_bar_date,
@@ -258,6 +266,7 @@ def compute_indicators(
             avg_volume_20d=avg20,
             volume_ratio=vol_ratio,
             session_partial=session_partial,
+            avg_traded_value_20d=avg_traded_value,
         ),
         None,
         None,

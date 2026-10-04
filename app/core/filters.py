@@ -18,6 +18,7 @@ def apply_stage1_filters(
     indicator: IndicatorResult,
     config: Settings,
     tracker: FunnelTracker,
+    market: str = "NSE",
 ) -> bool:
     """Apply Stage 1 technical filters (RSI, Volume Ratio, and Liquidity floor).
 
@@ -25,6 +26,7 @@ def apply_stage1_filters(
     - RSI > MIN_RSI (strict >)
     - volume_ratio > MIN_VOLUME_RATIO (strict >)
     - avg20 >= MIN_AVG_VOLUME (if MIN_AVG_VOLUME > 0)
+    - completed-session Close × Volume mean >= the enabled native-currency market floor
 
     Updates funnel tracker counts.
     Returns:
@@ -46,6 +48,15 @@ def apply_stage1_filters(
         return False
 
     if config.MIN_AVG_VOLUME > 0 and indicator.avg_volume_20d < config.MIN_AVG_VOLUME:
+        tracker.filtered_liquidity += 1
+        return False
+
+    floor = getattr(config, f"MIN_AVG_TRADED_VALUE_{market.upper()}")
+    value = indicator.avg_traded_value_20d
+    if value is None:
+        # Compatibility for older/custom IndicatorResult callers without paired bars.
+        value = indicator.avg_volume_20d * indicator.price
+    if floor > 0 and value < floor:
         tracker.filtered_liquidity += 1
         return False
 

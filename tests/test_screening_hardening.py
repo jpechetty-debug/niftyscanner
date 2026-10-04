@@ -35,7 +35,7 @@ def test_default_liquidity_filters_thin_spikes_without_data_failure():
     tracker = FunnelTracker()
     assert not apply_stage1_filters(make_dummy_indicator(60, 10, 500), cfg, tracker)
     assert tracker.filtered_liquidity == 1 and tracker.failed == 0
-    assert apply_stage1_filters(make_dummy_indicator(60, 2, cfg.MIN_AVG_VOLUME), cfg, FunnelTracker())
+    assert apply_stage1_filters(make_dummy_indicator(60, 2, 100000), cfg, FunnelTracker())
 
 
 def test_default_pe_rejects_losses_but_keeps_legacy_override():
@@ -58,14 +58,14 @@ def test_instrument_descriptions_exclude_noise_and_keep_equity_trusts(tmp_path):
         "TEST6": "SYNTHETIC Senior Debentures",
         "TEST7": "SYNTHETIC Acquisition Common Stock",
         "TEST8": "SYNTHETIC Income Fund Common Shares",
-        "TEST9": "SYNTHETIC Trust Shares of Beneficial Interest",
+        "TEST9": "SYNTHETIC Income Trust Shares of Beneficial Interest",
         "TEST10": "SYNTHETIC Unknown Instrument",
     }
     p = tmp_path / "SYNTHETIC.txt"
     p.write_text("ACT Symbol|Security Name|Exchange|ETF|Test Issue\n" +
                  "\n".join(f"{s}|{name}|N|N|N" for s, name in names.items()))
     assert {s.symbol for s in NYSEUniverse(p, Settings(_env_file=None)).load()} == {
-        "TEST1", "TEST2", "TEST3", "TEST4"}
+        "TEST1", "TEST2", "TEST3", "TEST4", "TEST10"}
 
 
 @pytest.mark.parametrize("timestamp,partial,expected", [
@@ -165,7 +165,7 @@ def test_runtime_policy_updates_snapshot_without_intraday_sqlite(tmp_path, monke
 
 @pytest.mark.parametrize("values", [
     {"HISTORY_MODE": "unknown"}, {"HISTORY_INTRADAY_INTERVAL_SEC": -1},
-    {"NYSE_REQUIRE_NAME_PATTERN": "["}, {"NYSE_EXCLUDE_NAME_PATTERN": "["},
+    {"MIN_AVG_TRADED_VALUE_NSE": -1}, {"NYSE_EXCLUDE_NAME_PATTERN": "["},
 ])
 def test_invalid_history_or_instrument_config_fails_fast(values):
     from pydantic import ValidationError

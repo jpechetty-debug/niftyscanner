@@ -10,6 +10,7 @@ from contextlib import contextmanager
 def strategy_context(config) -> dict:
     keys = ("RSI_PERIOD", "MIN_RSI", "RSI_CAP", "REQUIRE_RSI_TREND_UP",
             "MIN_VOLUME_RATIO", "VOLUME_RATIO_CAP", "VOLUME_LOOKBACK", "MIN_AVG_VOLUME",
+            "MIN_AVG_TRADED_VALUE_NSE", "MIN_AVG_TRADED_VALUE_NYSE",
             "MIN_VOLUME_PROJECTION_ELAPSED", "OPTIMAL_PE", "MIN_PE", "MAX_PE",
             "WEIGHT_VOLUME", "WEIGHT_RSI", "WEIGHT_PE", "MAX_BAR_AGE_SESSIONS", "MIN_BARS")
     return {"version": "composite-v1", **{key: getattr(config, key) for key in keys}}

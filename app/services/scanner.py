@@ -117,7 +117,7 @@ class StockScannerService:
 
             assert indicator is not None
             # Apply Stage 1 business logic filters (RSI, Volume ratio)
-            if apply_stage1_filters(indicator, self.config, tracker):
+            if apply_stage1_filters(indicator, self.config, tracker, market=self.calendar.market):
                 stage1_survivors[ticker] = indicator
 
         logger.info(
@@ -139,6 +139,10 @@ class StockScannerService:
                 tracker.record_failure(fail.ticker, fail.stage, fail.code, fail.message, fail.affected_count)
 
             for ticker, pe_value in pe_dict.items():
+                from app.core.fundamentals import NonPositiveEarnings
+                if isinstance(pe_value, NonPositiveEarnings):
+                    tracker.filtered_pe += 1
+                    continue
                 if apply_stage2_pe_filter(pe_value, self.config, tracker):
                     indicator = stage1_survivors[ticker]
                     u_sym = symbol_map[ticker]

@@ -9,13 +9,14 @@ from loguru import logger
 
 from app.core.interfaces import Clock
 from app.core.outcomes import FailureCode
+from app.core.fundamentals import NonPositiveEarnings
 from app.market.clock import SystemClock
 
 
 @dataclass
 class PECacheEntry:
     """Cache entry holding P/E value or negative MISSING_PE signal."""
-    value: Optional[float]
+    value: float | NonPositiveEarnings | None
     is_missing: bool
     cached_at: datetime
 
@@ -35,7 +36,7 @@ class PECache:
         self.clock = clock or SystemClock()
         self._cache: Dict[str, PECacheEntry] = {}
 
-    def get(self, ticker: str) -> Tuple[bool, Optional[float], Optional[FailureCode]]:
+    def get(self, ticker: str) -> Tuple[bool, float | NonPositiveEarnings | None, Optional[FailureCode]]:
         """Look up P/E for a ticker.
 
         Returns:
@@ -59,8 +60,8 @@ class PECache:
 
         return True, entry.value, None
 
-    def set_valid_pe(self, ticker: str, pe: float) -> None:
-        """Cache a valid positive trailing P/E value."""
+    def set_valid_pe(self, ticker: str, pe: float | NonPositiveEarnings) -> None:
+        """Cache valid P/E or confirmed non-positive EPS with the same TTL."""
         self._cache[ticker] = PECacheEntry(
             value=pe,
             is_missing=False,

@@ -37,8 +37,13 @@ class Settings(BaseSettings):
     NYSE_EXCLUDE_SYMBOL_SUFFIXES: List[str] = [
         ".WS", ".WSA", ".WSB", ".U", ".UN", ".RT", ".R"
     ]
-    NYSE_EXCLUDE_NAME_PATTERN: str = r"\b(?:preferred|warrants?|units?|rights?|notes?|debentures?|bonds?|acquisition|funds?)\b"
-    NYSE_REQUIRE_NAME_PATTERN: str = r"\b(?:common\s+(?:stock|shares)|ordinary\s+shares|ADS|ADR|American\s+Depositary\s+(?:Shares|Receipts))\b"
+    NYSE_EXCLUDE_NAME_PATTERN: str = (
+        r"\b(?:preferred|warrants?|units?|rights?|notes?|debentures?|bonds?|acquisition|funds?|municipals?|opportunit(?:y|ies)|strats|corts)\b"
+        r"|\b(?:term|income)\s+trusts?\b"
+        r"|\b(?:BlackRock|Eaton\s+Vance|Gabelli|abrdn|John\s+Hancock|Royce|Franklin\s+Universal)\b.*\b(?:trusts?|beneficial\s+interest)\b"
+        r"|\bEaton\s+Vance\b.*\bcommon\s+(?:stock|shares?)\b"
+        r"|\bcapital\s+trust\b|\btax[- ]free\s+income\s+portfolio\b"
+    )
 
     # Timing & Scheduling
     REFRESH_INTERVAL_SEC: int = 60
@@ -71,7 +76,9 @@ class Settings(BaseSettings):
     MIN_VOLUME_RATIO: float = 1.5
     VOLUME_RATIO_CAP: float = 10.0
     VOLUME_LOOKBACK: int = Field(default=20, gt=0)
-    MIN_AVG_VOLUME: float = Field(default=100_000.0, ge=0, allow_inf_nan=False)
+    MIN_AVG_VOLUME: float = Field(default=0.0, ge=0, allow_inf_nan=False)
+    MIN_AVG_TRADED_VALUE_NSE: float = Field(default=10_000_000.0, ge=0, allow_inf_nan=False)
+    MIN_AVG_TRADED_VALUE_NYSE: float = Field(default=1_000_000.0, ge=0, allow_inf_nan=False)
     MIN_VOLUME_PROJECTION_ELAPSED: float = 0.25
     OPTIMAL_PE: float = Field(default=10.0, gt=0, allow_inf_nan=False)
     MAX_PE: float = 50.0
@@ -137,7 +144,6 @@ class Settings(BaseSettings):
             raise ValueError("HISTORY_MODE must be canonical or all")
         try:
             re.compile(self.NYSE_EXCLUDE_NAME_PATTERN)
-            re.compile(self.NYSE_REQUIRE_NAME_PATTERN)
         except re.error as error:
             raise ValueError(f"Invalid NYSE instrument pattern: {error}") from error
         if not self.enabled_markets_list or set(self.enabled_markets_list) - {"NSE", "NYSE"}:

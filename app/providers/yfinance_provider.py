@@ -21,6 +21,7 @@ from app.cache.pe_cache import PECache
 from app.cache.bar_cache import BarCache
 from app.core.circuit_breaker import CircuitBreaker, CircuitState
 from app.core.config import Settings
+from app.core.fundamentals import NonPositiveEarnings, confirmed_nonpositive_earnings
 from app.core.interfaces import Clock, MarketDataProvider
 from app.core.outcomes import FailedSymbolItem, FailureCode, Stage
 from app.market.clock import SystemClock
@@ -185,15 +186,20 @@ class YFinanceProvider(MarketDataProvider):
 
     def _fetch_single_pe(
         self, ticker: str
-    ) -> Tuple[str, Optional[float], Optional[FailureCode], Optional[str], bool]:
+    ) -> Tuple[str, float | NonPositiveEarnings | None, Optional[FailureCode], Optional[str], bool]:
         """Fetch trailing P/E for a single ticker via Ticker.info.
 
         Returns:
-            Tuple of (ticker, pe_float, fail_code, fail_msg, is_systemic_failure)
+            Tuple of (ticker, P/E or confirmed earnings marker, failure code/message, systemic flag)
         """
         try:
             t = yf.Ticker(ticker)
             info = t.info
+
+            if isinstance(info, dict):
+                earnings = confirmed_nonpositive_earnings(info)
+                if earnings is not None:
+                    return ticker, earnings, None, None, False
 
             if not isinstance(info, dict) or "trailingPE" not in info:
                 return ticker, None, FailureCode.MISSING_PE, "trailingPE key absent in Ticker.info", False
@@ -212,7 +218,7 @@ class YFinanceProvider(MarketDataProvider):
             is_systemic = self._is_systemic_error(e)
             return ticker, None, FailureCode.PE_FETCH_FAILED, f"Error fetching Ticker.info: {e}", is_systemic
 
-    def _fetch_pe_with_retries(self, ticker: str) -> Tuple[Tuple[str, Optional[float], Optional[FailureCode], Optional[str], bool], int]:
+    def _fetch_pe_with_retries(self, ticker: str) -> Tuple[Tuple[str, float | NonPositiveEarnings | None, Optional[FailureCode], Optional[str], bool], int]:
         """Reserve each attempt under a lock, including the single half-open trial."""
         count = 0
         for attempt in range(self.config.MAX_RETRIES):
@@ -236,9 +242,9 @@ class YFinanceProvider(MarketDataProvider):
             self.clock.sleep(2**attempt + random.uniform(0.1, 0.5))
         raise RuntimeError("Unreachable retry state")
 
-    def fetch_pe_batch(self, tickers: List[str]) -> Tuple[Dict[str, float], int, List[FailedSymbolItem]]:
+    def fetch_pe_batch(self, tickers: List[str]) -> Tuple[Dict[str, float | NonPositiveEarnings], int, List[FailedSymbolItem]]:
         """Fetch bounded batches; stop dispatch on breaker opening and retain failures."""
-        results: Dict[str, float] = {}
+        results: Dict[str, float | NonPositiveEarnings] = {}
         failures: List[FailedSymbolItem] = []
         pending: List[str] = []
         count = 0

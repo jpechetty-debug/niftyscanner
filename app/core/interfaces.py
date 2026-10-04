@@ -8,6 +8,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from app.core.outcomes import FailedSymbolItem
+from app.core.fundamentals import NonPositiveEarnings
 
 
 class UniverseSymbol(BaseModel):
@@ -73,12 +74,12 @@ class MarketDataProvider(Protocol):
 
     def fetch_pe_batch(
         self, tickers: List[str]
-    ) -> Tuple[Dict[str, float], int, List[FailedSymbolItem]]:
+    ) -> Tuple[Dict[str, float | NonPositiveEarnings], int, List[FailedSymbolItem]]:
         """Fetch trailing P/E for a list of tickers.
 
         Returns:
             Tuple of:
-            - Dict mapping ticker -> valid P/E value
+            - Dict mapping ticker -> valid P/E or confirmed NonPositiveEarnings
             - Request count
             - List of P/E failure items (MISSING_PE, INVALID_PE, PE_FETCH_FAILED)
         """

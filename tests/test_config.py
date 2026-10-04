@@ -17,7 +17,9 @@ def test_default_config_valid():
     assert settings.VOLUME_RATIO_CAP == 10.0
     assert settings.MAX_PE == 50.0
     assert settings.MIN_PE == 1.0
-    assert settings.MIN_AVG_VOLUME == 100_000.0
+    assert settings.MIN_AVG_VOLUME == 0
+    assert settings.MIN_AVG_TRADED_VALUE_NSE == 10_000_000
+    assert settings.MIN_AVG_TRADED_VALUE_NYSE == 1_000_000
     assert settings.MIN_BARS == 60
     assert settings.VOLUME_LOOKBACK == 20
 
