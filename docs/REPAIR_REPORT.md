@@ -197,3 +197,67 @@ Live verification is NOT complete; no live pass claimed.
 Next scheduled run: re-read spec, inspect existing evidence, run eligible mode.
 Stop condition: both attempts completed, or a failure needs user attention.
 ```
+
+# UI improvement: light research workspace
+
+Completed the user's UI request with the existing light theme: white surfaces, blue accents, neutral borders, compact metric cards and a simpler header. Removed the remote font import and technical environment-variable wording from the main screen. Retained HTTP-only access, market selection, timed polling, stale warnings, delayed-data disclosure, scan/settings controls and the research disclaimer.
+
+The qualified list now shows every API result by default. Search, partial-session filtering and optional indicator filters only narrow that list; disabling the indicator filters restores all qualified results. Volume filtering has no fixed upper cap, and P/E filtering can include non-positive values. Added explicit sorting, a compact highest-ranked summary, optional detailed volume columns, exchange-local timestamps, clear empty states, filtered CSV containing all original result fields and white chart backgrounds. Diagnostics stay on a separate tab. The original white/blue theme palette is preserved. Corrected Streamlit's usage-statistics setting to the supported browser section.
+
+Files modified: `ui/app.py`, `.streamlit/config.toml`, `tests/test_ui.py`, `scripts/live_verify.py`, `docs/REPAIR_REPORT.md`. Created: `tests/fixtures/ui_results_synthetic.json` (explicitly labelled, test-only fictitious companies); runtime screenshot `logs/ui/light-ui-preview.png` (ignored by Git). No market data, backend screening thresholds, scheduled cadence or installed dependencies were changed.
+
+Related correction for the already-authorized pending live verification: the API's data_as_of is an exchange-local ISO timestamp, not a bare date. The verification helper now compares its date prefix with the actual session date. The previous guard would falsely reject valid fresh data. This correction does not constitute a live scan or live verification pass.
+
+Commands/actions: full spec read; CodeGraph UI/client/tests exploration; installed Streamlit API signature inspection; targeted UI pytest; full pytest; py_compile; browser review using the existing local services; git diff/check/status; verified cleanup of workspace-only test folders. Attempted new local service launches found ports 8000/8501 already occupied, so the running user services were reused. No additional service was left running and no scan was triggered during browser QA.
+
+Actual final verification output:
+
+```text
+.venv/Scripts/python.exe -m pytest tests/test_ui.py tests/test_repairs.py::test_streamlit_renders_real_countdown_without_network -q -p no:cacheprovider --tb=short
+7 passed in 2.38s
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider --basetemp=.ui-final-tests --tb=short
+107 passed, 1 warning in 3.97s
+py_compile scripts/live_verify.py ui/app.py: exit 0
+```
+
+An initial full-suite run had 99 passing tests and eight temporary-directory permission errors under .pytest_cache; using a fresh workspace test folder resolved those errors. The remaining warning is the existing Starlette/AnyIO deprecation. Automated interaction coverage includes full results by default, negative P/E filtering, high volume ratios, exchange-local time, sorting, enabling/disabling filters, search and no-match rendering. Synthetic responses are restricted to the AppTest process; the production preview uses the existing HTTP API and saved real results.
+
+VERIFIED: 107 offline tests; actual browser rendering of the sidebar, results and light charts; search narrowing 18 saved results to the matching company; sorting interaction; computed app background rgb(255,255,255) and text rgb(33,37,41); no frontend imports of backend internals. Reviewed narrow/default and desktop layouts; restored the temporary viewport override. NOT VERIFIED: fresh live Yahoo scans or all browser/device combinations. The scheduled live pair remains pending. The visible saved scan was already available from the user's running service; it is not counted toward that pair.
+
+Assumptions: preserve Streamlit and the existing light palette; UI filters affect the view, not backend screening; CSV exports all fields for currently visible results even when optional table columns are hidden. No blockers.
+
+| SPEC section | Status | Note |
+|---|---|---|
+| 0 Operating rules | Done | Spec re-read; scoped UI improvement and verification evidence recorded. |
+| 2 Data integrity | Done | Fictitious data restricted to labelled test fixtures; browser uses existing API data. |
+| 3 Stack | Done | Existing Streamlit/pandas/Plotly; no new dependencies. |
+| 9 session_partial | Done | Flags retained, filter and incomplete-volume explanation visible. |
+| 16 Market status | Done | Open/closed, exchange time, holiday awareness and delayed-data notice. |
+| 17 API | Done | Existing HTTP contract preserved; timestamp display/verification use actual format. |
+| 18 Streamlit UI | Done | Light theme, table/search/sorting, filters, CSV, refresh/countdown, stale banner and footer. |
+| 20 Tests | Done | UI interactions and full suite executed; 107 passed. |
+
+```text
+STATE SUMMARY
+Phase completed: light UI improvement.
+ui/app.py: lighter layout, optional filters, sorting, local times, white charts.
+.streamlit/config.toml: retain light theme; move usage-statistics setting to browser.
+tests/test_ui.py: optional filters, timestamps, actual Streamlit interaction checks.
+tests/fixtures/ui_results_synthetic.json: labelled fictitious UI data for tests only.
+scripts/live_verify.py: compare ISO data_as_of date with actual session date.
+docs/REPAIR_REPORT.md: UI changes, verification and limitations.
+logs/ui/light-ui-preview.png: browser preview, ignored runtime artifact.
+Public: filter_results_dataframe(df, search_query, min_rsi, min_vol_ratio, max_pe,
+partial_only) -> pd.DataFrame; three numeric filters now also accept None.
+Public: format_scan_time(value: Optional[str], market: str) -> str.
+main() and live_status_and_countdown_fragment(market) signatures preserved.
+results_fragment parameters preserved; numeric filter types now Optional[float].
+Backend APIs unchanged; no new threshold/config keys or dependencies.
+Decision: display all API-qualified stocks unless users narrow the view.
+Decision: preserve the existing light theme; charts explicitly use white backgrounds.
+Tests: final 107 passed, one existing upstream deprecation warning.
+Browser QA: real saved results, sidebar, search, sorting and charts reviewed.
+Live scans: still NOT VERIFIED; existing scheduled follow-up remains active.
+Next phase first step: re-read docs/SPEC.md before further authorized changes.
+Stopped after UI improvement; no additional development phase started.
+```

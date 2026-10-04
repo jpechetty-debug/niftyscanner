@@ -1,417 +1,295 @@
-"""Streamlit Frontend Application for Stock Screener.
-
-INVARIANT PER SECTION 18:
-The UI talks ONLY to FastAPI via API_BASE_URL (httpx).
-It never imports 'app' internals and never triggers scans directly.
-"""
-
+"""Light Streamlit workspace. All screening data comes through the HTTP API."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
 import os
 import sys
-from typing import Any, Dict, List, Optional
-import pandas as pd
-import streamlit as st
-import plotly.express as px
+from typing import Optional
+from zoneinfo import ZoneInfo
 
-# Ensure ui directory is in path for api_client import without app dependencies
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from api_client import ScreenerApiClient
 
-st.set_page_config(
-    page_title="Stock Screener | Nifty 500 & NYSE",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
+st.set_page_config(page_title="Stock Screener | Nifty 500 & NYSE", page_icon="📈",
+                   layout="wide", initial_sidebar_state="expanded")
 api_client = ScreenerApiClient()
+CURRENCY = {"NSE": "₹", "NYSE": "$"}
+TIMEZONES = {"NSE": "Asia/Kolkata", "NYSE": "America/New_York"}
+RESULTS_POLL_SEC = 10
 
 
-# ==============================================================================
-# Helper Functions for Client-Side Filtering
-# ==============================================================================
 def filter_results_dataframe(
-    df: pd.DataFrame,
-    search_query: str,
-    min_rsi: float,
-    min_vol_ratio: float,
-    max_pe: float,
-    partial_only: bool,
+    df: pd.DataFrame, search_query: str, min_rsi: Optional[float],
+    min_vol_ratio: Optional[float], max_pe: Optional[float], partial_only: bool,
 ) -> pd.DataFrame:
-    """Filter results DataFrame based on interactive sidebar controls."""
+    """Narrow API results only when the user enables a filter."""
     if df.empty:
         return df
-
     filtered = df.copy()
-
-    # Search filter
     if search_query.strip():
-        q = search_query.strip().lower()
-        mask = (
-            filtered["ticker"].astype(str).str.lower().str.contains(q, regex=False)
-            | filtered["name"].astype(str).str.lower().str.contains(q, regex=False)
-        )
-        filtered = filtered[mask]
-
-    # Threshold sliders
-    filtered = filtered[filtered["rsi"] >= min_rsi]
-    filtered = filtered[filtered["volume_ratio"] >= min_vol_ratio]
-    filtered = filtered[filtered["pe"] <= max_pe]
-
+        query = search_query.strip().lower()
+        filtered = filtered[
+            filtered["ticker"].astype(str).str.lower().str.contains(query, regex=False)
+            | filtered["name"].astype(str).str.lower().str.contains(query, regex=False)
+        ]
+    if min_rsi is not None:
+        filtered = filtered[filtered["rsi"] >= min_rsi]
+    if min_vol_ratio is not None:
+        filtered = filtered[filtered["volume_ratio"] >= min_vol_ratio]
+    if max_pe is not None:
+        filtered = filtered[filtered["pe"] <= max_pe]
     if partial_only:
-        filtered = filtered[filtered["session_partial"] == True]
-
+        filtered = filtered[filtered["session_partial"]]
     return filtered
 
 
-# ==============================================================================
-# Dynamic Fragment: Live Countdown & Auto-Refresh Header
-# ==============================================================================
-@st.fragment(run_every=2)
-def live_status_and_countdown_fragment(market: str) -> None:
-    """Displays real-time countdown, market status, and refresh controls with auto-refresh."""
-    status_data, err = api_client.get_status(market=market)
-
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-
-    if status_data:
-        m_status = status_data.get("market_status", {})
-        is_open = m_status.get("is_open", False)
-        status_text = "🟢 OPEN" if is_open else "🔴 CLOSED"
-        exchange_time = m_status.get("exchange_time", "")
-
-        with col1:
-            st.metric("Market Status", status_text, help=f"Exchange Local: {exchange_time}")
-
-        with col2:
-            is_scanning = status_data.get("is_scanning", False)
-            scan_state_str = "⏳ Scanning in progress..." if is_scanning else " Idle"
-            st.metric("Engine State", scan_state_str)
-
-        with col3:
-            eff_int = status_data.get("effective_interval_sec", 60)
-            last_sec = status_data.get("last_scan_seconds", 0.0)
-            st.metric("Effective Interval", f"{eff_int}s", help=f"Last scan duration: {last_sec}s")
-
-        deadline = status_data.get("next_refresh_at")
-        if deadline:
-            remaining = max(0, int((datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds()))
-            st.caption(f"Next refresh in {remaining}s")
-        else:
-            st.caption("Next refresh: scan in progress" if is_scanning else "No scan scheduled")
-
-        with col4:
-            if st.button("🔄 Trigger Scan Now", use_container_width=True, disabled=is_scanning):
-                success, msg, retry_after = api_client.post_refresh(market=market)
-                if success:
-                    st.toast("Scan scheduled successfully! Results will update shortly.", icon="🔄")
-                else:
-                    st.toast(msg or "Refresh currently not permitted.", icon="⚠️")
-    else:
-        st.error(f"Cannot reach API status service: {err}")
+def format_scan_time(value: Optional[str], market: str) -> str:
+    """Display API timestamps in exchange time without guessing missing values."""
+    if not value:
+        return "Awaiting first scan"
+    try:
+        stamp = datetime.fromisoformat(value)
+        if stamp.tzinfo is not None:
+            stamp = stamp.astimezone(ZoneInfo(TIMEZONES[market]))
+        return stamp.strftime("%d %b %Y · %H:%M %Z").strip()
+    except (ValueError, TypeError):
+        return "Time unavailable"
 
 
-def apply_custom_css():
+def apply_custom_css() -> None:
+    """Refine the existing white/blue theme without remote font dependencies."""
     st.markdown("""
-        <style>
-        /* Import Inter font */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        
-        html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif !important;
-        }
-        
-        /* Metric cards styling */
-        [data-testid="stMetric"] {
-            background-color: #FFFFFF;
-            border: 1px solid #E5E7EB;
-            border-radius: 8px;
-            padding: 16px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            transition: all 0.2s ease-in-out;
-        }
-        
-        [data-testid="stMetric"]:hover {
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transform: translateY(-2px);
-        }
-        
-        /* Metric value styling */
-        [data-testid="stMetricValue"] {
-            color: #212529;
-            font-weight: 700;
-        }
-        </style>
+    <style>
+      .stApp { background: #ffffff; color: #212529; }
+      [data-testid="stHeader"] { background: #ffffff; }
+      [data-testid="stSidebar"] { background: #f8f9fa; border-right: 1px solid #e5e7eb; }
+      .block-container { max-width: 1500px; padding-top: 2rem; padding-bottom: 2rem; }
+      h1 { letter-spacing: -0.045em; font-weight: 700; }
+      h2, h3 { letter-spacing: -0.02em; }
+      .workspace-label { color: #0d6efd; font-size: .75rem; font-weight: 700;
+                         letter-spacing: .14em; margin-bottom: .3rem; }
+      [data-testid="stMetric"] { background: #ffffff; border: 1px solid #e5e7eb;
+        border-radius: 12px; padding: 14px 18px; }
+      [data-testid="stMetricLabel"] { color: #5b6470; }
+      [data-testid="stMetricValue"] { color: #212529; font-size: 1.65rem; font-weight: 650; }
+      [data-testid="stDataFrame"] { border: 1px solid #e5e7eb; border-radius: 12px; }
+      .stButton > button, .stDownloadButton > button { border-radius: 9px; }
+      [data-testid="stTabs"] [role="tablist"] { gap: 1.5rem; }
+      [data-testid="stTabs"] [role="tab"] { font-weight: 600; }
+      @media (max-width: 760px) {
+        .block-container { padding: 1.2rem 1rem; }
+        [data-testid="stMetricValue"] { font-size: 1.35rem; }
+      }
+    </style>
     """, unsafe_allow_html=True)
 
 
-# ==============================================================================
-# Main Application Flow
-# ==============================================================================
+@st.fragment(run_every=2)
+def live_status_and_countdown_fragment(market: str) -> None:
+    """Poll exchange status and the backend's actual next-scan deadline."""
+    status_data, error = api_client.get_status(market=market)
+    if not status_data:
+        st.error(f"Unable to connect to the scanner. {error or 'Please check the API service.'}")
+        return
+    market_status = status_data.get("market_status", {})
+    scanning = status_data.get("is_scanning", False)
+    deadline = status_data.get("next_refresh_at")
+    remaining = None
+    if deadline:
+        remaining = max(0, int((datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds()))
+    market_col, scan_col, next_col, action_col = st.columns(4)
+    market_col.metric("Market", "Open" if market_status.get("is_open") else "Closed",
+                      help=market_status.get("exchange_time", "Exchange time unavailable"))
+    scan_col.metric("Scan status", "Scanning" if scanning else "Ready",
+                    help=f"Refresh interval: {status_data.get('effective_interval_sec', 0)}s. "
+                         f"Last scan: {status_data.get('last_scan_seconds', 0):.1f}s.")
+    next_label = f"{remaining // 60:02d}:{remaining % 60:02d}" if remaining is not None else (
+        "Scanning" if scanning else "Paused")
+    next_col.metric("Next scan", next_label, help="Minutes : seconds until the next scheduled scan.")
+    with action_col:
+        st.caption("Refresh results")
+        if st.button("Scan now", type="primary", width="stretch", disabled=scanning):
+            accepted, message, retry_after = api_client.post_refresh(market=market)
+            if accepted:
+                st.toast("Scan queued. Results will update automatically.", icon="✅")
+                st.rerun()
+            else:
+                detail = message or "Scan unavailable. Please try again."
+                if retry_after and f"{retry_after}s" not in detail:
+                    detail += f" Retry in {retry_after}s."
+                st.toast(detail, icon="⚠️")
+    if remaining is not None:
+        st.caption(f"Next refresh in {remaining}s · Exchange time: {market_status.get('exchange_time', 'unavailable')}")
+    else:
+        st.caption(f"{market_status.get('exchange_time', 'Exchange time unavailable')} · "
+                   + ("Scan in progress" if scanning else "No automatic scan scheduled"))
+    if market_status.get("is_holiday"):
+        st.caption("No trading session today. The latest available results remain accessible.")
+
+
 def main() -> None:
     apply_custom_css()
-    st.title("⚡ Quantitative Stock Screener")
-    st.caption(
-        "Screening criteria are set by the backend (`MIN_RSI`, `MIN_VOLUME_RATIO`, `MIN_PE`/`MAX_PE`); sliders below only narrow the results. "
-        "Notice: Market data is provided by yfinance. Data is delayed and not real-time."
-    )
-
-    # 1. Sidebar Controls
     with st.sidebar:
-        st.header("Screening Controls")
-
-        market_choice = st.selectbox(
-            "Target Market",
-            options=["NSE", "NYSE"],
-            index=0,
-            help="Select market universe for screening (NSE or NYSE).",
-        )
-        active_market = market_choice
-
-        st.subheader("Filter Adjustments")
-        search_query = st.text_input("Search Ticker / Name", placeholder="e.g. INFY, Sun TV")
-        slider_rsi = st.slider("Minimum RSI", min_value=40.0, max_value=80.0, value=50.0, step=1.0)
-        slider_vol = st.slider("Minimum Volume Ratio", min_value=1.5, max_value=10.0, value=2.0, step=0.1)
-        slider_pe = st.slider("Maximum Trailing P/E", min_value=5.0, max_value=50.0, value=50.0, step=1.0)
-        partial_only = st.checkbox("Show Partial Sessions Only", value=False)
-
+        st.markdown("### Stock Screener")
+        st.caption("Your market research workspace")
+        market = st.selectbox("Market", ["NSE", "NYSE"],
+                              format_func=lambda name: "NSE · Nifty 500" if name == "NSE" else "NYSE · US equities")
         st.divider()
-        st.subheader("Runtime Configuration")
-        curr_interval, _ = api_client.get_settings()
-        if curr_interval is not None:
-            new_interval = st.number_input(
-                "Refresh Interval (seconds)",
-                min_value=30,
-                max_value=300,
-                value=int(curr_interval),
-                step=10,
-                help="Allowed range: 30 to 300 seconds.",
-            )
-            if st.button("Apply New Interval"):
-                ok, set_msg = api_client.put_settings(new_interval)
-                if ok:
-                    st.success("Interval updated!")
-                else:
-                    st.error(set_msg)
-
-    # 2. Render Live Fragment Header
-    live_status_and_countdown_fragment(market=active_market)
-
-    # 3. Results live in their own fragment so they re-poll the API on a timer
-    results_fragment(
-        market=active_market,
-        search_query=search_query,
-        min_rsi=slider_rsi,
-        min_vol_ratio=slider_vol,
-        max_pe=slider_pe,
-        partial_only=partial_only,
-    )
-
-
-CURRENCY = {"NSE": "₹", "NYSE": "$"}
-RESULTS_POLL_SEC = 10
+        st.subheader("Refine results")
+        st.caption("These controls narrow the qualified list.")
+        search = st.text_input("Search stocks", placeholder="Ticker or company name")
+        partial_only = st.checkbox("Current session only", help="Only stocks with a partial daily bar while the market is open.")
+        refine = st.toggle("Use indicator filters", value=False)
+        with st.expander("Indicator filters", expanded=refine):
+            rsi = st.slider("Minimum RSI", 0.0, 100.0, 0.0, 1.0, disabled=not refine)
+            volume = st.number_input("Minimum volume ratio", min_value=0.0, value=0.0, step=0.1, disabled=not refine)
+            limit_pe = st.checkbox("Limit trailing P/E", disabled=not refine)
+            pe = st.number_input("Maximum trailing P/E", value=0.0, step=1.0, disabled=not (refine and limit_pe),
+                                 help="Negative and zero P/E values can be included in the qualified list.")
+        st.divider()
+        with st.expander("Refresh settings"):
+            interval, error = api_client.get_settings()
+            if interval is not None:
+                new_interval = st.number_input("Refresh interval (seconds)", min_value=30,
+                                               max_value=300, value=int(interval), step=10)
+                if st.button("Apply interval", width="stretch"):
+                    ok, message = api_client.put_settings(int(new_interval))
+                    st.success("Refresh interval updated.") if ok else st.error(message)
+            else:
+                st.caption(error or "Settings unavailable.")
+        st.caption("Data from Yahoo Finance may be delayed and is not real-time.")
+    st.markdown('<div class="workspace-label">MARKET RESEARCH</div>', unsafe_allow_html=True)
+    st.title("Stock Screener")
+    st.caption("Explore qualified stocks by momentum, trading activity and valuation. "
+               "Yahoo Finance data is delayed and not real-time.")
+    live_status_and_countdown_fragment(market)
+    results_fragment(market, search, rsi if refine else None, volume if refine else None,
+                     pe if refine and limit_pe else None, partial_only)
 
 
 @st.fragment(run_every=RESULTS_POLL_SEC)
 def results_fragment(
-    market: str,
-    search_query: str,
-    min_rsi: float,
-    min_vol_ratio: float,
-    max_pe: float,
-    partial_only: bool,
+    market: str, search_query: str, min_rsi: Optional[float],
+    min_vol_ratio: Optional[float], max_pe: Optional[float], partial_only: bool,
 ) -> None:
-    """Fetches and renders results; re-runs on a timer so new scans appear without interaction."""
-    results_data, err = api_client.get_results(market=market)
-
-    if err:
-        st.error(err)
+    """Render qualified results, clear empty states, light charts and scan details."""
+    response, error = api_client.get_results(market=market)
+    if error or not response:
+        st.error(error or "No results available. Check the scanner connection.")
+        st.caption("Not financial advice.")
         return
-
-    if not results_data:
-        st.info("No scan results currently available.")
-        return
-
-    meta = results_data.get("meta", {})
-    results_list = results_data.get("results", [])
-    failures_list = results_data.get("failed_symbols", [])
-
-    # 4. Stale Banner
+    meta = response.get("meta", {})
+    results = response.get("results", [])
+    failures = response.get("failed_symbols", [])
+    funnel = meta.get("funnel", {})
     if meta.get("stale"):
-        reasons = meta.get("stale_reasons", [])
-        reasons_str = "; ".join(reasons) if reasons else "Data freshness threshold exceeded."
-        st.warning(
-            f"⚠️ **STALE DATA NOTICE**: Displayed screening results may be outdated. "
-            f"Reason(s): {reasons_str}"
-        )
-
-    # 5. Tabbed Interface
-    tab_results, tab_visualizations, tab_diagnostics = st.tabs([
-        "📊 Screener Results",
-        "📈 Visualizations",
-        "⚙️ Diagnostics"
-    ])
-
-    with tab_results:
-        st.subheader(f"Screening Survivors ({len(results_list)} Stocks Meeting All Criteria)")
-
-        if results_list:
-            df = pd.DataFrame(results_list)
-            filtered_df = filter_results_dataframe(
-                df=df,
-                search_query=search_query,
-                min_rsi=min_rsi,
-                min_vol_ratio=min_vol_ratio,
-                max_pe=max_pe,
-                partial_only=partial_only,
-            )
-
-            display_cols = [
-                "ticker",
-                "name",
-                "market",
-                "price",
-                "pe",
-                "rsi",
-                "volume",
-                "avg_volume_20d",
-                "volume_ratio",
-                "score",
-                "session_partial",
-                "bar_date",
-            ]
-            available_cols = [c for c in display_cols if c in filtered_df.columns]
-            view_df = filtered_df[available_cols].copy()
-
-            if len(view_df) > 0:
-                st.markdown("### 🏆 Top Ranked Stock")
-                top_stock = view_df.iloc[0]
-                sc1, sc2, sc3, sc4 = st.columns(4)
-                
-                # Format price with currency
-                price_str = f"{CURRENCY.get(market, '')}{top_stock['price']:.2f}"
-                sc1.metric(f"Top Pick: {top_stock['ticker']}", price_str, f"Score: {top_stock['score']:.4f}")
-                
-                # Show RSI
-                sc2.metric("RSI (14)", f"{top_stock['rsi']:.1f}")
-                
-                # Show Volume Ratio with volume as delta
-                vol_ratio = float(top_stock['volume_ratio'])
-                is_partial = bool(top_stock.get('session_partial', False))
-                partial_note = " (partial)" if is_partial else ""
-                vol_str = f"{top_stock['volume']:,.0f} vol{partial_note}"
-                sc3.metric("Volume Ratio", f"{vol_ratio:.1f}x", vol_str, delta_color="normal")
-                
-                # P/E Ratio
-                pe_val = float(top_stock['pe'])
-                sc4.metric("Trailing P/E", f"{pe_val:.1f}")
-
-                st.markdown("---")
-                st.markdown("### 📋 All Qualified Stocks")
-
-            st.dataframe(
-                view_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "ticker": st.column_config.TextColumn("Ticker"),
-                    "name": st.column_config.TextColumn("Company Name"),
-                    "price": st.column_config.NumberColumn(f"Price ({CURRENCY.get(market, '')})", format="%.2f"),
-                    "pe": st.column_config.NumberColumn("P/E Ratio", format="%.2f"),
-                    "rsi": st.column_config.ProgressColumn("RSI(14)", format="%.2f", min_value=0, max_value=100),
-                    "volume": st.column_config.NumberColumn(
-                        "Latest Vol",
-                        format="%d",
-                        help="Raw latest volume. Note: during market hours, volume is partial while Vol Ratio is projected to full session.",
-                    ),
-                    "avg_volume_20d": st.column_config.NumberColumn("20d Avg Vol", format="%.0f"),
-                    "volume_ratio": st.column_config.NumberColumn(
-                        "Vol Ratio",
-                        format="%.2fx",
-                        help="Volume ratio relative to 20-day average. Projected to full-session during market hours.",
-                    ),
-                    "score": st.column_config.NumberColumn("Rank Score", format="%.4f"),
-                    "session_partial": st.column_config.CheckboxColumn("Partial"),
-                    "bar_date": st.column_config.DateColumn("Bar Date"),
-                },
-            )
-
-            # CSV Export Button
-            csv_text = view_df.to_csv(index=False)
-            st.download_button(
-                label="📥 Export Filtered Table to CSV",
-                data=csv_text,
-                file_name=f"screener_{market}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-            )
+        st.warning("Saved results may be outdated. " + "; ".join(meta.get("stale_reasons", []) or ["Awaiting a successful scan."]))
+    st.caption(f"Last refreshed: {format_scan_time(meta.get('last_refreshed'), market)}  ·  "
+               f"Data session: {format_scan_time(meta.get('data_as_of'), market)}")
+    summary = st.columns(3)
+    summary[0].metric("Qualified stocks", f"{len(results):,}")
+    summary[1].metric("Universe size", f"{funnel.get('universe', 0):,}")
+    summary[2].metric("Data issues", f"{funnel.get('failed', 0):,}",
+                       help="Affected symbols, including any chunk failures. Normal filters are excluded.")
+    df = pd.DataFrame(results)
+    filtered = filter_results_dataframe(df, search_query, min_rsi, min_vol_ratio, max_pe, partial_only)
+    results_tab, charts_tab, details_tab = st.tabs(["Qualified stocks", "Insights", "Scan details"])
+    with results_tab:
+        if not results:
+            st.info("No qualified stocks in this scan. Check Scan details for filtering and data issues.")
         else:
-            st.info("No stocks currently satisfy all three screening conditions.")
-
-    with tab_visualizations:
-        st.subheader("Data Insights")
-        if results_list and not view_df.empty:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig_scatter = px.scatter(
-                    view_df,
-                    x="pe",
-                    y="volume_ratio",
-                    size="rsi",
-                    color="score",
-                    hover_name="ticker",
-                    hover_data=["name", "price", "rsi"],
-                    title="Value vs. Momentum",
-                    labels={"pe": "Trailing P/E", "volume_ratio": "Volume Ratio (x)", "score": "Rank Score"},
-                    color_continuous_scale="Blues",
-                )
-                fig_scatter.update_layout(margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig_scatter, use_container_width=True)
-                
-            with col2:
-                fig_hist = px.histogram(
-                    view_df,
-                    x="rsi",
-                    nbins=10,
-                    title="RSI Distribution",
-                    labels={"rsi": "RSI(14)"},
-                    color_discrete_sequence=["#0D6EFD"],
-                )
-                fig_hist.update_layout(margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig_hist, use_container_width=True)
+            tools = st.columns([3, 2])
+            tools[0].caption(f"Showing {len(filtered):,} of {len(results):,} qualified stocks")
+            sort = tools[1].selectbox("Sort results", ["Rank score", "Volume ratio", "RSI", "P/E", "Company"],
+                                      label_visibility="collapsed", key=f"sort_{market}")
+            sort_fields = {"Rank score": (["score", "volume_ratio", "ticker"], [False, False, True]),
+                           "Volume ratio": (["volume_ratio", "ticker"], [False, True]),
+                           "RSI": (["rsi", "ticker"], [False, True]),
+                           "P/E": (["pe", "ticker"], [True, True]),
+                           "Company": (["name", "ticker"], [True, True])}
+            fields, ascending = sort_fields[sort]
+            filtered = filtered.sort_values(fields, ascending=ascending, kind="stable")
+            if filtered.empty:
+                st.info("No stocks match your view. Clear the search or loosen the sidebar filters.")
+            else:
+                best = filtered.sort_values(["score", "volume_ratio", "ticker"], ascending=[False, False, True]).iloc[0]
+                with st.container(border=True):
+                    st.markdown(f"Highest ranked · **{best['ticker']} · {best['name']}**")
+                    st.caption(f"{CURRENCY.get(market, '')}{best['price']:,.2f}  ·  "
+                               f"Score {best['score']:.4f}  ·  RSI {best['rsi']:.1f}  ·  "
+                               f"Volume {best['volume_ratio']:.2f}×  ·  P/E {best['pe']:.2f}")
+                volume_details = st.checkbox("Show volume details", value=False, key=f"volume_details_{market}")
+                columns = ["ticker", "name", "score", "price", "rsi", "volume_ratio", "pe", "session_partial", "bar_date"]
+                if volume_details:
+                    columns += ["volume", "avg_volume_20d", "market"]
+                view = filtered[[name for name in columns if name in filtered]].copy()
+                if "bar_date" in view:
+                    view["bar_date"] = pd.to_datetime(view["bar_date"]).dt.date
+                st.dataframe(view, width="stretch", hide_index=True, row_height=38,
+                             column_config={
+                                 "ticker": st.column_config.TextColumn("Ticker", width="small"),
+                                 "name": st.column_config.TextColumn("Company", width="medium"),
+                                 "score": st.column_config.NumberColumn("Score", format="%.4f"),
+                                 "price": st.column_config.NumberColumn(f"Price ({CURRENCY.get(market, '')})", format="%.2f"),
+                                 "rsi": st.column_config.ProgressColumn("RSI", min_value=0, max_value=100, format="%.1f"),
+                                 "volume_ratio": st.column_config.NumberColumn("Volume ×", format="%.2f", help="Compared with completed-session average. Partial-session ratios use a bounded projection."),
+                                 "pe": st.column_config.NumberColumn("Trailing P/E", format="%.2f"),
+                                 "session_partial": st.column_config.CheckboxColumn("Partial", help="Today's daily bar while the exchange is open. Volume is incomplete."),
+                                 "bar_date": st.column_config.DateColumn("Session", format="DD MMM YYYY"),
+                                 "volume": st.column_config.NumberColumn("Observed volume", format="%d"),
+                                 "avg_volume_20d": st.column_config.NumberColumn("Average volume", format="%.0f"),
+                             })
+                st.download_button("Download filtered CSV", filtered.to_csv(index=False),
+                                   file_name=f"screener_{market}_{datetime.now():%Y%m%d_%H%M%S}.csv",
+                                   mime="text/csv", on_click="ignore")
+                if filtered["session_partial"].any():
+                    st.caption("Partial bars contain incomplete volume. Projected ratios may overestimate or underestimate closing volume.")
+    with charts_tab:
+        st.subheader("Explore this view")
+        if filtered.empty:
+            st.info("Charts appear when stocks match your current filters.")
         else:
-            st.info("No data available to visualize. Adjust filters or wait for more results.")
-
-    with tab_diagnostics:
-        # 6. Diagnostic Funnel & Metrics
-        funnel = meta.get("funnel", {})
-        st.subheader("📊 Screening Funnel & Pipeline Diagnostics")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Constituents in Universe", funnel.get("universe", 0))
-        c2.metric("Successfully Fetched", funnel.get("fetched", 0))
-        c3.metric("Passed RSI & Volume", funnel.get("passed_rsi_volume", 0))
-        c4.metric("Qualified (Passed P/E)", funnel.get("passed_pe", 0))
-
-        c5, c6, c7, c8 = st.columns(4)
-        c5.metric("Filtered by RSI", funnel.get("filtered_rsi", 0))
-        c6.metric("Filtered by Volume", funnel.get("filtered_volume", 0))
-        c7.metric("Filtered by P/E", funnel.get("filtered_pe", 0))
-        c8.metric("Data / System Failures", funnel.get("failed", 0))
+            left, right = st.columns(2)
+            scatter = px.scatter(filtered, x="pe", y="volume_ratio", size="rsi", color="score",
+                                 hover_name="ticker", hover_data=["name", "price", "rsi"],
+                                 title="Valuation & trading activity", template="plotly_white",
+                                 labels={"pe": "Trailing P/E", "volume_ratio": "Volume ratio", "score": "Score"},
+                                 color_continuous_scale="Blues")
+            histogram = px.histogram(filtered, x="rsi", nbins=10, title="Momentum distribution",
+                                     template="plotly_white", labels={"rsi": "RSI", "count": "Stocks"},
+                                     color_discrete_sequence=["#0D6EFD"])
+            histogram.update_layout(yaxis_title="Stocks")
+            for column, figure in ((left, scatter), (right, histogram)):
+                figure.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
+                                     font_color="#212529", margin=dict(l=16, r=16, t=48, b=16),
+                                     xaxis=dict(gridcolor="#EDF0F3"), yaxis=dict(gridcolor="#EDF0F3"))
+                with column:
+                    st.plotly_chart(figure, width="stretch", theme=None)
+    with details_tab:
+        st.subheader("Scan details")
+        st.caption(f"Scan duration: {meta.get('scan_seconds', 0):.1f}s · "
+                   f"Provider attempts: {meta.get('request_count', 0):,} · "
+                   f"Refresh interval: {meta.get('effective_interval_sec', 0)}s")
+        stages = [("Universe", "universe"), ("Data fetched", "fetched"),
+                  ("Passed RSI & volume", "passed_rsi_volume"), ("Qualified", "passed_pe"),
+                  ("Filtered by RSI", "filtered_rsi"), ("Filtered by volume", "filtered_volume"),
+                  ("Filtered by P/E", "filtered_pe"), ("Data issues", "failed")]
+        for offset in (0, 4):
+            for column, (label, key) in zip(st.columns(4), stages[offset:offset + 4]):
+                column.metric(label, f"{funnel.get(key, 0):,}")
         if funnel.get("filtered_liquidity", 0):
-            st.caption(f"Also excluded by liquidity floor: {funnel['filtered_liquidity']}")
-
-        # 7. Failed Symbols
-        if failures_list:
-            st.markdown("---")
-            st.subheader(f"⚠️ Failed Symbols & Data Issues ({len(failures_list)})")
-            fail_df = pd.DataFrame(failures_list)
-            st.dataframe(fail_df, use_container_width=True, hide_index=True)
-
-    # 8. Footer
-    st.markdown("---")
-    st.caption("Disclaimer: For algorithmic and technical research purposes only. Not financial advice.")
+            st.caption(f"Filtered by liquidity: {funnel['filtered_liquidity']:,}")
+        if failures:
+            with st.expander(f"Data issue records ({len(failures):,})"):
+                st.dataframe(pd.DataFrame(failures), width="stretch", hide_index=True)
+        else:
+            st.caption("No data issue records reported.")
+    st.divider()
+    st.caption("For research purposes. Not financial advice.")
 
 
 if __name__ == "__main__":

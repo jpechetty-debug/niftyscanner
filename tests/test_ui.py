@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from ui.api_client import ScreenerApiClient
-from ui.app import filter_results_dataframe
+from ui.app import filter_results_dataframe, format_scan_time
 
 
 def test_ui_strict_architectural_decoupling():
@@ -88,6 +88,60 @@ def test_ui_filter_results_dataframe():
     )
     assert len(f_partial) == 2
     assert set(f_partial["ticker"]) == {"TCS.NS", "RELIANCE.NS"}
+
+
+def test_optional_filters_preserve_every_qualified_result():
+    """UI defaults must not silently re-screen backend results or cap volume."""
+    import json
+    response = json.loads(Path("tests/fixtures/ui_results_synthetic.json").read_text())
+    frame = pd.DataFrame(response["results"])
+    result = filter_results_dataframe(frame, "", None, None, None, False)
+    pd.testing.assert_frame_equal(frame, result)
+    assert len(filter_results_dataframe(frame, "", None, None, 0, False)) == 1
+
+
+def test_exchange_local_scan_times():
+    assert "11:00 IST" in format_scan_time("2026-10-01T05:30:00+00:00", "NSE")
+    assert "09:30 EDT" in format_scan_time("2026-10-01T13:30:00+00:00", "NYSE")
+    assert format_scan_time(None, "NSE") == "Awaiting first scan"
+    assert format_scan_time("invalid", "NSE") == "Time unavailable"
+
+
+def test_light_workspace_search_sort_and_empty_state(monkeypatch):
+    """Exercise actual Streamlit controls with labelled test-only API responses."""
+    import importlib
+    import json
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.syspath_prepend(str(Path("ui").resolve()))
+    client = importlib.import_module("api_client").ScreenerApiClient
+    response = json.loads(Path("tests/fixtures/ui_results_synthetic.json").read_text())
+    monkeypatch.setattr(client, "get_results", lambda *a, **k: (response, None))
+    monkeypatch.setattr(client, "get_status", lambda *a, **k: ({
+        "market_status": {"is_open": False, "is_holiday": True}, "is_scanning": False}, None))
+    monkeypatch.setattr(client, "get_settings", lambda *a, **k: (60, None))
+    page = AppTest.from_file("ui/app.py").run()
+    assert not page.exception
+    assert len(page.dataframe[0].value) == 3
+    assert page.dataframe[0].value.iloc[0]["ticker"] == "TEST2.NS"
+    assert page.warning and "outdated" in page.warning[0].value
+    assert any("11:00 IST" in caption.value for caption in page.caption)
+    page.selectbox(key="sort_NSE").select("P/E").run()
+    assert not page.exception
+    assert page.dataframe[0].value.iloc[0]["ticker"] == "TEST1.NS"
+    page.toggle[0].set_value(True).run()
+    page.slider[0].set_value(60.0).run()
+    assert not page.exception
+    assert set(page.dataframe[0].value["ticker"]) == {"TEST2.NS", "TEST3.NS"}
+    page.toggle[0].set_value(False).run()
+    assert len(page.dataframe[0].value) == 3
+    page.text_input[0].set_value("SYNTHETIC Gamma").run()
+    assert not page.exception
+    assert page.dataframe[0].value["ticker"].tolist() == ["TEST3.NS"]
+    page.text_input[0].set_value("no-match").run()
+    assert not page.exception
+    assert any("No stocks match your view" in info.value for info in page.info)
+    assert not page.dataframe
 
 
 def test_screener_api_client_error_handling(monkeypatch):

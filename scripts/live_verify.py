@@ -69,7 +69,7 @@ async def verify(mode: str, check_only: bool) -> int:
         errors.append("No new successful scan timestamp.")
     if completed.astimezone(calendar.tz).date().isoformat() != local_date:
         errors.append("Scan crossed the session date.")
-    if ok and (payload["meta"]["stale"] or payload["meta"]["data_as_of"] != local_date):
+    if ok and (payload["meta"]["stale"] or payload["meta"]["data_as_of"][:10] != local_date):
         errors.append("Feed did not provide fresh data for this session.")
     if mode == "market-hours" and not calendar.is_market_open(completed):
         errors.append("Scan did not complete during market hours.")

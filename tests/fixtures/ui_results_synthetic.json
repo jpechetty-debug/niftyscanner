@@ -1,0 +1,20 @@
+{
+  "notice": "SYNTHETIC UI TEST DATA. Fictitious companies; never served by the API.",
+  "meta": {
+    "market": "NSE", "stale": true, "stale_reasons": ["SYNTHETIC pending scan"],
+    "data_as_of": "2026-10-01T00:00:00+05:30", "last_refreshed": "2026-10-01T05:30:00+00:00",
+    "funnel": {"universe": 3, "fetched": 3, "passed_pe": 3, "failed": 0}
+  },
+  "results": [
+    {"ticker": "TEST1.NS", "name": "SYNTHETIC Alpha", "market": "NSE", "price": 100.0,
+     "rsi": 45.0, "volume_ratio": 1.6, "pe": -5.0, "score": 0.1, "volume": 1600,
+     "avg_volume_20d": 1000, "session_partial": false, "bar_date": "2026-10-01"},
+    {"ticker": "TEST2.NS", "name": "SYNTHETIC Beta", "market": "NSE", "price": 200.0,
+     "rsi": 65.0, "volume_ratio": 3.0, "pe": 18.0, "score": 0.6, "volume": 3000,
+     "avg_volume_20d": 1000, "session_partial": false, "bar_date": "2026-10-01"},
+    {"ticker": "TEST3.NS", "name": "SYNTHETIC Gamma", "market": "NSE", "price": 300.0,
+     "rsi": 60.0, "volume_ratio": 20.0, "pe": 12.0, "score": 0.5, "volume": 20000,
+     "avg_volume_20d": 1000, "session_partial": false, "bar_date": "2026-10-01"}
+  ],
+  "failed_symbols": []
+}
