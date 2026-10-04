@@ -66,7 +66,7 @@ A local-first, single-user stock screener that returns stocks meeting ALL of:
 - Finite trailing P/E in MIN_PE (1) <= P/E < MAX_PE (50); non-positive values are valid data but filtered by default. An explicit negative MIN_PE may admit them with zero valuation score.
 - Previous 20-session mean daily Close × Volume >= MIN_AVG_TRADED_VALUE_NSE (10000000 INR) or MIN_AVG_TRADED_VALUE_NYSE (1000000 USD). Optional MIN_AVG_VOLUME defaults to 0; these configurable proxy floors do not guarantee an executable next-open fill.
 
-Data source: yfinance only. Markets: NSE Nifty 500 (Phases 1-3), NYSE (Phase 4) through the same Universe interface. Results are ranked by a stable composite score. Runs locally, bound to 127.0.0.1 by default.
+Primary market-data source: yfinance. An optional user-supplied dated independent reference CSV enriches NSE risk/P/E comparisons without affecting filters or rankings. Markets: NSE Nifty 500 (Phases 1-3), NYSE (Phase 4) through the same Universe interface. Results are ranked by a stable composite score. Runs locally, bound to 127.0.0.1 by default.
 
 ---
 
@@ -93,7 +93,7 @@ Python 3.12.
 
 Pin every version in `requirements.txt` after resolving the latest tested versions. If you cannot resolve them offline, say so and mark it NOT VERIFIED. Anything else requires approval.
 
-Holiday and session source: `exchange_calendars` (`XBOM` as the available NSE proxy, `XNYS` for NYSE); the NSE proxy limitation must be disclosed. In Phase 0, verify both calendars are available in the pinned version. If not, stop and ask.
+Holiday and session source: `exchange_calendars` (`XBOM` as the available NSE proxy, `XNYS` for NYSE), with configurable confirmed NSE closures (`NSE_EXTRA_HOLIDAYS`, default `2026-01-15`). Use a separate NSE calendar instance; never mutate the globally cached XBOM calendar. Future completeness and special-session hours remain unverified. In Phase 0, verify both calendars are available in the pinned version. If not, stop and ask.
 
 ---
 
@@ -152,7 +152,7 @@ No threshold is a literal in code. All values below are config with these defaul
 | ENABLED_MARKETS | NSE,NYSE | Phase 4 enabled |
 | NSE_UNIVERSE_PATH | data/nifty500.csv | |
 | NYSE_UNIVERSE_PATH | data/otherlisted.txt | |
-| REFRESH_INTERVAL_SEC | 60 | allowed 30-300 |
+| REFRESH_INTERVAL_SEC | 300 | allowed 30-300; saved settings override the default |
 | MARKET_CLOSE_SCAN_DELAY_MIN | 20 | successful final scan this long after close |
 | POST_CLOSE_RETRY_INTERVAL_SEC | 300 | minimum automatic retry delay after a failed scan completes |
 | REFRESH_COOLDOWN_SEC | 30 | manual refresh spacing |
@@ -204,7 +204,7 @@ No threshold is a literal in code. All values below are config with these defaul
 Never generate constituents from memory. If a required file is missing: STOP and ask the user for it. (Ask during Phase 0 so the user has time; it blocks Phase 1.)
 
 ## NSE (`data/nifty500.csv`)
-- Required columns: `Symbol`, `Company Name`. Other columns are ignored.
+- Required columns: `Symbol`, `Company Name`. Optional `Series` is normalized; exclude `RR` units, retain `BE` trade-for-trade equities. Exclude symbols starting with `DUMMY`. Other columns are ignored.
 - Yahoo ticker = `Symbol` + `.NS`. No other transformation. Company name comes from the file.
 - Tickers that Yahoo no longer serves surface as `DELISTED` in `failed_symbols`.
 
@@ -495,3 +495,18 @@ A phase is complete only when:
 5. VERIFIED vs NOT VERIFIED is reported.
 6. SPEC COMPLIANCE table and STATE SUMMARY are included (section 0).
 7. Work has stopped awaiting `CONTINUE`.
+
+---
+
+# 23. AUTHORIZED REVIEW COMPLETION (October 2026)
+
+This extension implements the user's request to complete the missing review items.
+
+- Confirmed NSE closures: configurable `NSE_EXTRA_HOLIDAYS` (default `2026-01-15`); validate dates and preserve the global XBOM calendar. New screening and outcome schedules share the corrected calendar. Existing resolved cohort schedules remain immutable; older histories require an explicit separate audit.
+- Daily move: `day_change_pct` from adjacent cleaned Yahoo adjusted closes, including indicative partial-session bars.
+- Circuit check: `CIRCUIT_BANDS_PCT=2,5,10,20`, `CIRCUIT_PROXIMITY_PCT=0.5` percentage points. Common-band proximity is explicitly indicative. Nullable `circuit_risk` never presents unknown context as safe. An optional dated reference with explicit non-F&O classification supports fixed-band checks; F&O dynamic ranges remain unclassified.
+- Optional reference: `NSE_REFERENCE_CSV` defaults empty. CSV columns `Symbol,Date,Source,PE,PriceBandPct,FNO`; numeric context columns optional. Match signal date exactly, reject ambiguous duplicates, fail unavailable without affecting funnel/rank, load via isolated `ReferenceProvider` protocol. `PE_REFERENCE_TOLERANCE_PCT=25` sets relative comparison tolerance. No fabricated values or automatic-source verification claims.
+- Result/API/export fields: `day_change_pct`, `circuit_risk`, `circuit_risk_status`, `circuit_risk_reason`, `reference_source`, `reference_date`, `pe_reference`, `pe_check_status`; optional defaults preserve old snapshots.
+- Performance API: `return_basis=gross|net`, default gross; expose selected basis/cost assumptions and both gross/net metrics for resolved rows. Buckets and hit rates follow the selected basis. Preserve stored gross returns, unresolved/pending coverage and original signal records. Net deducts costs from stock cash flows; the price index remains gross.
+- All cost rates are configurable basis points: `PERFORMANCE_BUY_STT_BPS=10`, `PERFORMANCE_SELL_STT_BPS=10`, `PERFORMANCE_STAMP_BPS=1.5`, `PERFORMANCE_BROKERAGE_BPS=0`, `PERFORMANCE_OTHER_COST_BPS=1`, `PERFORMANCE_SLIPPAGE_BPS=5`. Nonnegative finite rates <=1000 bp each. Slippage applies each side; stamp applies buy only; brokerage/other costs each side. Apply the configured rates uniformly across reported history and disclose fixed-fee/rounding/size limitations.
+- UI remains HTTP-only and displays source uncertainty, band caution and gross/estimated net controls. Neither risk context nor costs alter live screening scores.

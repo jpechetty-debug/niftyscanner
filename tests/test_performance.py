@@ -304,6 +304,9 @@ def test_performance_ui_controls_and_export(setup, monkeypatch):
     page.radio(key="perf_group_NSE").set_value("RSI band").run()
     assert not page.exception and calls[-1]["horizon"] == 10
     assert any(page.dataframe[0].value["bucket"] == "60–<70")
+    page.radio(key="perf_basis_NSE").set_value("Estimated net").run()
+    assert not page.exception and calls[-1]["return_basis"] == "net"
+    assert float(page.metric[1].value.split()[0]) < 8
     page.date_input(key="perf_start_NSE").set_value(datetime(2026,10,23).date()).run()
     assert not page.exception
     assert "No evaluated outcomes yet" in page.info[0].value

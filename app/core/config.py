@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Markets & Universes
     ENABLED_MARKETS: str = "NSE,NYSE"
     NSE_UNIVERSE_PATH: str = "data/nifty500.csv"
+    NSE_EXTRA_HOLIDAYS: str = "2026-01-15"
+    NSE_REFERENCE_CSV: str = ""
+    CIRCUIT_BANDS_PCT: str = "2,5,10,20"
+    CIRCUIT_PROXIMITY_PCT: float = Field(default=0.5, ge=0, le=2, allow_inf_nan=False)
+    PE_REFERENCE_TOLERANCE_PCT: float = Field(default=25, ge=0, allow_inf_nan=False)
     NYSE_UNIVERSE_PATH: str = "data/otherlisted.txt"
     NYSE_EXCLUDE_SYMBOL_SUFFIXES: List[str] = [
         ".WS", ".WSA", ".WSB", ".U", ".UN", ".RT", ".R"
@@ -108,6 +113,24 @@ class Settings(BaseSettings):
     PERFORMANCE_SCORE_EDGES: str = "0,0.25,0.5,0.75,1"
     PERFORMANCE_VOLUME_EDGES: str = "0,1.5,3,5,10"
     PERFORMANCE_RSI_EDGES: str = "0,40,50,60,70,100"
+    # NSE delivery-equity model: configurable estimates, not a contract-note calculator.
+    PERFORMANCE_BUY_STT_BPS: float = Field(default=10, ge=0, le=1000, allow_inf_nan=False)
+    PERFORMANCE_SELL_STT_BPS: float = Field(default=10, ge=0, le=1000, allow_inf_nan=False)
+    PERFORMANCE_STAMP_BPS: float = Field(default=1.5, ge=0, le=1000, allow_inf_nan=False)
+    PERFORMANCE_BROKERAGE_BPS: float = Field(default=0, ge=0, le=1000, allow_inf_nan=False)
+    PERFORMANCE_OTHER_COST_BPS: float = Field(default=1, ge=0, le=1000, allow_inf_nan=False)
+    PERFORMANCE_SLIPPAGE_BPS: float = Field(default=5, ge=0, le=1000, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_nse_context(self) -> Settings:
+        from datetime import date
+        for value in self.NSE_EXTRA_HOLIDAYS.split(","):
+            if value.strip():
+                date.fromisoformat(value.strip())
+        bands = [float(value) for value in self.CIRCUIT_BANDS_PCT.split(",")]
+        if not bands or any(not math.isfinite(value) or not 0 < value <= 100 for value in bands):
+            raise ValueError("CIRCUIT_BANDS_PCT must contain positive finite percentages <= 100")
+        return self
 
     @model_validator(mode="after")
     def validate_performance(self) -> Settings:

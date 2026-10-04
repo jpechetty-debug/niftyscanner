@@ -23,11 +23,14 @@ Missing/null P/E with finite reported `trailingEps <= 0` is a normal profitabili
 
 ### Real-Data Operational Notes & Known Limitations (October 2026 Session Review)
 - **NSE Universe Hygiene:** Constituent symbols starting with `DUMMY` (e.g. `DUMMYHEG` placeholder in official Nifty 500 CSV) and Series `RR` (REIT/InvIT units without equity P/E metrics) are automatically filtered out upon load. Series `BE` (trade-for-trade delivery stocks) remain eligible.
-- **Default Scan Interval:** Default `REFRESH_INTERVAL_SEC` is set to 300s (5 min), reducing yfinance requests from ~125k to ~40k per market session to prevent rate limiting.
-- **NSE Trading Calendar:** The `XBOM` proxy calendar from `exchange_calendars` is used. Note that specific one-off state holidays (e.g. Maharashtra municipal elections on 15 Jan 2026) may be absent upstream; future scheduled closures align with NSE official circulars. Muhurat trading sessions default to market closed.
+- **Default Scan Interval:** Default `REFRESH_INTERVAL_SEC` is 300s (5 min). Saved preferences override the default. Fewer scans reduce load; request totals depend on scan duration, retries and caching, and rate limiting is still possible.
+- **NSE Trading Calendar:** The `XBOM` proxy is supplemented with `NSE_EXTRA_HOLIDAYS=2026-01-15`, following [NSE circular 72260](https://nsearchives.nseindia.com/content/circulars/CMTR72260.pdf). Future calendar completeness and Muhurat hours remain unverified; special sessions remain closed until supported.
 - **Intraday Volume Projection:** Early-session projection caps the multiplier at 4x until elapsed time exceeds 25% (~10:49 IST). Morning breakouts may require higher volume to qualify before 11:00 AM.
-- **P/E Metric Source:** Valuation data relies solely on `yfinance` (`trailingPE`). Spot-checking against official NSE quotes or screener.in is recommended before executing trades.
-- **Gross Tracker Returns:** The performance evaluation module tracks gross price returns between entry and exit horizons (1d, 5d, 10d). It does not model transaction costs, STT, exchange fees, or slippage.
+- **P/E Metric Source:** Filtering/scoring uses Yahoo `trailingPE`. Optional `NSE_REFERENCE_CSV` compares an independently checked, dated P/E and labels matches/divergences; no reference means unverified. Automatic NSE quote access was not available during verification.
+- **Circuit Proximity:** Results expose daily move and circuit-warning status. Moves near common 2/5/10/20% bands are explicitly indicative unless a supplied dated reference identifies a fixed band and non-F&O equity. A warning does not establish a locked circuit or executable next-open fill.
+- **Tracker Costs:** Performance offers gross and estimated net price returns for 1/5/10 sessions. Net deducts configurable STT, buy stamp duty, brokerage, other charges and slippage; the index remains gross. Stored gross outcomes are preserved. Fixed fees and order-size effects are not modeled.
+
+See [feature configuration, assumptions and verification](docs/FEATURE_COMPLETION.md) for the reference CSV contract and cost calculation.
 
 See [review corrections and verification limits](docs/REVIEW_CORRECTIONS.md) and [real-data review](docs/REAL_DATA_REVIEW.md). The [portable evidence archive](docs/evidence/review-evidence-2026-10-04.zip) includes a consistent history database backup, recorded real probes, constituent files and a network-free verifier.
 

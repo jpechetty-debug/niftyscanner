@@ -126,6 +126,8 @@ async def export_csv(
         "score",
         "session_partial",
         "bar_date",
+        "day_change_pct", "circuit_risk", "circuit_risk_status", "circuit_risk_reason",
+        "reference_source", "reference_date", "pe_reference", "pe_check_status",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()

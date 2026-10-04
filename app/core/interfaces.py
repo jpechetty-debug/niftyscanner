@@ -33,6 +33,14 @@ class ScanResultItem(BaseModel):
     score: float
     session_partial: bool
     bar_date: str  # ISO YYYY-MM-DD
+    day_change_pct: Optional[float] = None
+    circuit_risk: Optional[bool] = None
+    circuit_risk_status: str = "unavailable"
+    circuit_risk_reason: str = "Price band not verified"
+    reference_source: Optional[str] = None
+    reference_date: Optional[str] = None
+    pe_reference: Optional[float] = None
+    pe_check_status: str = "unavailable"
 
 
 @runtime_checkable

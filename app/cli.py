@@ -70,9 +70,10 @@ def main() -> None:
 
     clock = SystemClock()
     market_upper = args.market.strip().upper()
-    calendar = MarketCalendar(market=market_upper)
+    calendar = MarketCalendar(market=market_upper, config=config)
 
     if args.offline:
+        config.NSE_REFERENCE_CSV = ""  # Offline runs must use only synthetic fixtures.
         provider = FakeProvider(print_banner=True)
         if market_upper == "NYSE":
             universe_loader = NYSEUniverse("tests/fixtures/otherlisted_synthetic.txt", config=config)

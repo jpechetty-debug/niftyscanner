@@ -11,6 +11,7 @@ import pandas as pd
 
 from app.performance.repository import PerformanceRepository, strategy_id
 from app.performance.provider import OutcomeDataUnavailable
+from app.performance.costs import cost_model, net_return
 
 HORIZONS = (1, 5, 10)
 EVALUATION_VERSION = "next-open-price-v1"
@@ -284,7 +285,9 @@ class PerformanceService:
             (reason,stamp,cohort,horizon,self.config.PERFORMANCE_BENCHMARK,
              self.config.PERFORMANCE_PRICE_BASIS,EVALUATION_VERSION))
 
-    def report(self, market="NSE", horizon=5, start=None, end=None, strategy=None):
+    def report(self, market="NSE", horizon=5, start=None, end=None, strategy=None, return_basis="gross"):
+        if return_basis not in {"gross", "net"}:
+            raise ValueError("Return basis must be gross or net")
         if market != "NSE":
             return {"supported": False, "message": "Performance tracking currently supports NSE against Nifty 500."}
         if horizon not in HORIZONS:
@@ -307,6 +310,15 @@ class PerformanceService:
             row["matured"] = bool(row["exit_at"] and datetime.fromisoformat(row["exit_at"]) <= now)
             if row["status"] == "pending" and row["matured"]:
                 row["status"], row["reason"] = "unresolved", "awaiting_evaluation"
+            if row["status"] == "resolved":
+                row["gross_stock_return"] = row["stock_return"]
+                row["gross_excess_return"] = row["excess_return"]
+                row["net_stock_return"] = net_return(row["stock_entry"], row["stock_exit"], self.config)
+                row["net_excess_return"] = row["net_stock_return"] - row["benchmark_return"]
+                row["estimated_cost_drag_pp"] = row["gross_stock_return"] - row["net_stock_return"]
+                if return_basis == "net":
+                    row["stock_return"] = row["net_stock_return"]
+                    row["excess_return"] = row["net_excess_return"]
         groups = {}
         for field, setting in (("score","PERFORMANCE_SCORE_EDGES"),("volume_ratio","PERFORMANCE_VOLUME_EDGES"),("rsi","PERFORMANCE_RSI_EDGES")):
             edges = [float(x) for x in getattr(self.config,setting).split(",")]
@@ -319,6 +331,7 @@ class PerformanceService:
             buckets.append({"bucket": "Unknown", **self.summarize([r for r in rows if r[field] is None or not math.isfinite(r[field])])})
             groups[field] = buckets
         return {"supported": True, "market": market, "horizon": horizon,
+                "return_basis": return_basis, "cost_model": cost_model(self.config),
                 "benchmark": self.config.PERFORMANCE_BENCHMARK,
                 "price_basis": self.config.PERFORMANCE_PRICE_BASIS, "enabled": self.config.PERFORMANCE_ENABLED,
                 "nightly_time": self.config.PERFORMANCE_NIGHTLY_TIME, "strategies": strategies,

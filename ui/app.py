@@ -117,11 +117,16 @@ def result_card_html(row: pd.Series, market: str, spotlight: bool = False) -> st
              '<span>Rank #1 in this view</span></div>') if spotlight else ''
     session = escape(str(row.get('bar_date', 'Unavailable')))
     partial = ' · Partial session · Volume indicative' if row.get('session_partial') else ''
+    caution = ' · Possible circuit proximity (indicative)' if row.get('circuit_risk') is True else ''
+    if row.get('circuit_risk_status') == 'reference_band' and row.get('circuit_risk') is True:
+        caution = ' · Near supplied price band'
+    if row.get('pe_check_status') == 'divergent':
+        caution += ' · P/E reference differs'
     return (
         f'<article class="result-card {"spotlight" if spotlight else ""}"><div class="result-main">{badge}'
         f'<div class="result-identity"><strong>{escape(str(row["ticker"]))}</strong>'
         f'<span>{escape(str(row["name"]))}</span></div>'
-        f'<div class="card-detail">Data session: {session}{partial}</div></div>'
+        f'<div class="card-detail">Data session: {session}{partial}{caution}</div></div>'
         f'<div class="result-stats">{stats}</div></article>')
 
 
@@ -332,10 +337,19 @@ def results_fragment(
                 page = st.session_state[page_key]
                 offset = (page - 1) * 6
                 page_rows = filtered.iloc[offset:offset + 6]
-                columns = ["ticker", "name", "score", "price", "rsi", "volume_ratio", "pe", "session_partial", "bar_date"]
+                columns = ["ticker", "name", "score", "price", "day_change_pct", "rsi", "volume_ratio", "pe", "circuit_risk_status", "pe_check_status", "session_partial", "bar_date"]
                 if volume_details:
-                    columns += ["volume", "avg_volume_20d", "market"]
+                    columns += ["volume", "avg_volume_20d", "market", "circuit_risk_reason", "reference_source", "pe_reference"]
                 view = page_rows[[name for name in columns if name in filtered]].copy()
+                if "circuit_risk_status" in view:
+                    view["circuit_risk_status"] = page_rows.apply(lambda row:
+                        ("Near supplied band" if row.get("circuit_risk") else "Away from supplied band")
+                        if row.get("circuit_risk_status") == "reference_band" else
+                        {"indicative": "Possible proximity", "dynamic_band": "Flexible range",
+                         "unavailable": "Band unverified", "not_applicable": "N/A"}.get(row.get("circuit_risk_status"), "Band unverified"), axis=1)
+                if "pe_check_status" in view:
+                    view["pe_check_status"] = view["pe_check_status"].map({"match": "Matches reference",
+                        "divergent": "Reference differs", "unavailable": "No reference"}).fillna("No reference")
                 if "bar_date" in view:
                     view["bar_date"] = pd.to_datetime(view["bar_date"]).dt.date
                 if layout == "Cards":
@@ -357,6 +371,9 @@ def results_fragment(
                                  "rsi": st.column_config.ProgressColumn("RSI", width=140, min_value=0, max_value=100, format="%.1f"),
                                  "volume_ratio": st.column_config.NumberColumn("Volume ratio (×)", width=140, format="%.2f", help="Compared with completed-session average. Partial-session ratios use a bounded projection."),
                                  "pe": st.column_config.NumberColumn("Trailing P/E", width=110, format="%.2f"),
+                                 "day_change_pct": st.column_config.NumberColumn("Day move (%)", format="%.2f", help="Yahoo adjusted-close change; partial bars are indicative."),
+                                 "circuit_risk_status": st.column_config.TextColumn("Band check", help="Indicative = near a common band, actual band/F&O unverified. Unavailable does not mean safe. Reference band uses a supplied dated CSV."),
+                                 "pe_check_status": st.column_config.TextColumn("P/E check", help="Independent dated reference comparison. Unavailable = no valid matching reference, not a confirmed match."),
                                  "session_partial": st.column_config.CheckboxColumn("Partial", width=80, help="Today's daily bar while the exchange is open. Volume is incomplete."),
                                  "bar_date": st.column_config.DateColumn("Session", width=128, format="DD MMM YYYY"),
                                  "volume": st.column_config.NumberColumn("Observed volume", format="%d"),

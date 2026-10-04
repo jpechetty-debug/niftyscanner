@@ -43,7 +43,7 @@ class ScanStateManager:
             self.calendars = {calendar.market.upper(): calendar}
         else:
             self.calendars = {
-                m: MarketCalendar(m) for m in self.config.enabled_markets_list
+                m: MarketCalendar(m, config=self.config) for m in self.config.enabled_markets_list
             }
 
         # Markets tracked

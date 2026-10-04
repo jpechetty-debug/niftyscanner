@@ -43,7 +43,7 @@ def create_app(
     elif calendar is not None:
         calendars = {cfg.enabled_markets_list[0]: calendar}
     else:
-        calendars = {m: MarketCalendar(market=m) for m in cfg.enabled_markets_list}
+        calendars = {m: MarketCalendar(market=m, config=cfg) for m in cfg.enabled_markets_list}
 
     download_breakers: Dict[str, CircuitBreaker] = {}
     pe_breakers: Dict[str, CircuitBreaker] = {}
@@ -69,7 +69,7 @@ def create_app(
     # We will pass a provider instance directly if one was passed in via testing.
     # Otherwise, we create one for each market.
     for m in cfg.enabled_markets_list:
-        cal = calendars.get(m, MarketCalendar(market=m))
+        cal = calendars.get(m) or MarketCalendar(market=m, config=cfg)
         
         # Instantiate per-market breakers
         download_breakers[m] = CircuitBreaker(

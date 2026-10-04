@@ -1,6 +1,6 @@
 """HTTP-only performance reporting, with validated filters and worker-thread IO."""
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -16,6 +16,8 @@ class PerformanceResponse(BaseModel):
     horizon: int | None = None
     benchmark: str | None = None
     price_basis: str | None = None
+    return_basis: str = "gross"
+    cost_model: dict[str, Any] = Field(default_factory=dict)
     enabled: bool | None = None
     scheduler_running: bool = False
     nightly_time: str | None = None
@@ -31,7 +33,8 @@ class PerformanceResponse(BaseModel):
 async def performance(request: Request, market: str = "NSE",
                       horizon: int = 5,
                       start: date | None = None, end: date | None = None,
-                      strategy: str | None = Query(default=None, max_length=100)):
+                      strategy: str | None = Query(default=None, max_length=100),
+                      return_basis: Literal["gross", "net"] = "gross"):
     from app.api.routes import validate_market_parameter
     market = validate_market_parameter(market, request.app.state.config.enabled_markets_list)
     if horizon not in (1, 5, 10):
@@ -42,6 +45,6 @@ async def performance(request: Request, market: str = "NSE",
     if market != "NSE" or service is None:
         return {"supported": False, "message": "Performance tracking currently supports NSE against Nifty 500."}
     report = await asyncio.to_thread(service.report, market, horizon,
-        start.isoformat() if start else None, end.isoformat() if end else None, strategy)
+        start.isoformat() if start else None, end.isoformat() if end else None, strategy, return_basis)
     report["scheduler_running"] = request.app.state.scheduler.is_running
     return report

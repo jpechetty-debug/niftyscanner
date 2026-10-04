@@ -38,8 +38,8 @@ class ScreenerApiClient:
         except Exception as e:
             return None, f"Network error fetching results: {e}"
 
-    def get_performance(self, market="NSE", horizon=5, start=None, end=None, strategy=None):
-        params = {"market": market, "horizon": horizon}
+    def get_performance(self, market="NSE", horizon=5, start=None, end=None, strategy=None, return_basis="gross"):
+        params = {"market": market, "horizon": horizon, "return_basis": return_basis}
         params.update({k: str(v) for k, v in {"start": start, "end": end, "strategy": strategy}.items() if v is not None})
         try:
             with httpx.Client(timeout=self.timeout) as client:

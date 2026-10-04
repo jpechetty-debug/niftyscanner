@@ -22,7 +22,7 @@ from app.universe.nse import NSEUniverse
 async def verify(mode: str, check_only: bool) -> int:
     config = load_settings()
     clock = SystemClock()
-    calendar = MarketCalendar("NSE")
+    calendar = MarketCalendar("NSE", config=config)
     started = clock.now()
     local_date = started.astimezone(calendar.tz).date().isoformat()
     is_session = calendar.calendar.is_session(local_date)

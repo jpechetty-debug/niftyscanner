@@ -5,6 +5,8 @@ import streamlit as st
 
 def render_performance(client, market):
     st.subheader("Signal performance")
+    basis_label = st.radio("Returns", ["Gross", "Estimated net"], horizontal=True, key=f"perf_basis_{market}")
+    return_basis = "net" if basis_label == "Estimated net" else "gross"
     controls = st.columns([1, 1, 1, 2])
     horizon = controls[0].selectbox("Holding sessions", [1, 5, 10], index=1, key=f"perf_horizon_{market}")
     start = controls[1].date_input("From signal date", value=None, key=f"perf_start_{market}")
@@ -12,7 +14,7 @@ def render_performance(client, market):
     if start and end and start > end:
         st.warning("Start date must not follow end date.")
         return
-    data, error = client.get_performance(market=market, horizon=horizon, start=start, end=end)
+    data, error = client.get_performance(market=market, horizon=horizon, start=start, end=end, return_basis=return_basis)
     if error or not data:
         st.info(error or "Performance history is unavailable.")
         return
@@ -23,7 +25,7 @@ def render_performance(client, market):
     strategy = controls[3].selectbox("Strategy", options, key=f"perf_strategy_{market}",
         format_func=lambda value: "Legacy · settings unknown" if value == "legacy-unknown" else value)
     if strategy != "All strategies":
-        data, error = client.get_performance(market=market,horizon=horizon,start=start,end=end,strategy=strategy)
+        data, error = client.get_performance(market=market,horizon=horizon,start=start,end=end,strategy=strategy,return_basis=return_basis)
         if error or not data:
             st.info(error or "No matching history.")
             return
@@ -36,7 +38,16 @@ def render_performance(client, market):
         column.metric(label, value)
     st.caption(f'{summary["pending"]} pending · {summary["unresolved"]} unresolved · '
                f'{summary["excluded"]} excluded · {data["duplicates_removed"]} repeat captures removed. '
-               'Hit = excess return above zero. Returns are gross of costs.')
+               f'Hit = excess return above zero. Returns: {basis_label.lower()}; benchmark remains gross.')
+    with st.expander("Trading-cost assumptions"):
+        model = data.get("cost_model", {})
+        st.caption("1 basis point (bp) = 0.01%. Applied to entry cash outlay and exit proceeds, with slippage on both prices.")
+        st.caption(f"Buy STT: {model.get('buy_stt_bps', 0):g} bp · Sell STT: {model.get('sell_stt_bps', 0):g} bp · "
+                   f"Buy stamp duty: {model.get('stamp_bps', 0):g} bp. "
+                   f"Each side: brokerage {model.get('brokerage_bps_each_side', 0):g} bp, "
+                   f"other charges {model.get('other_cost_bps_each_side', 0):g} bp, "
+                   f"slippage {model.get('slippage_bps_each_side', 0):g} bp.")
+        st.caption(model.get("limitations", ""))
     if not summary["valid"]:
         st.info("No evaluated outcomes yet. Signals need completed holding sessions and exact stock/index prices.")
     elif summary["low_sample"]:

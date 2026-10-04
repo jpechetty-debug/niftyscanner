@@ -8,6 +8,19 @@ from typing import Optional
 import exchange_calendars as xcals
 import pandas as pd
 from pydantic import BaseModel
+from exchange_calendars.exchange_calendar_xbom import XBOMExchangeCalendar
+from app.core.config import Settings
+
+
+class NSECalendarWithOverrides(XBOMExchangeCalendar):
+    """Fresh XBOM instance plus confirmed NSE closures; never mutate the global cache."""
+    def __init__(self, extra_holidays):
+        self.extra_holidays = pd.DatetimeIndex(extra_holidays)
+        super().__init__()
+
+    @property
+    def adhoc_holidays(self):
+        return pd.DatetimeIndex(super().adhoc_holidays).union(self.extra_holidays)
 
 
 class MarketStatusInfo(BaseModel):
@@ -27,7 +40,7 @@ class MarketCalendar:
 
     # Map market identifiers to exchange_calendars identifiers
     MARKET_TO_CALENDAR = {
-        "NSE": "XBOM",  # XBOM (BSE) and NSE share identical trading hours and holidays in India
+        "NSE": "XBOM",  # Proxy supplemented with confirmed NSE holiday overrides.
         "XNSE": "XBOM",
         "XBOM": "XBOM",
         "NYSE": "XNYS",
@@ -41,10 +54,15 @@ class MarketCalendar:
         "XNYS": "America/New_York",
     }
 
-    def __init__(self, market: str = "NSE") -> None:
+    def __init__(self, market: str = "NSE", config: Optional[Settings] = None) -> None:
         self.market = market.upper()
         cal_name = self.MARKET_TO_CALENDAR.get(self.market, "XBOM")
         self.calendar = xcals.get_calendar(cal_name)
+        if self.market in {"NSE", "XNSE"}:
+            cfg = config or Settings()
+            holidays = [value.strip() for value in cfg.NSE_EXTRA_HOLIDAYS.split(",") if value.strip()]
+            if holidays:
+                self.calendar = NSECalendarWithOverrides(holidays)
         tz_name = self.TIMEZONES.get(self.market, "Asia/Kolkata")
         self.tz = zoneinfo.ZoneInfo(tz_name)
 

@@ -29,6 +29,7 @@ from app.core.outcomes import (
 from app.core.ranking import calculate_composite_score, rank_results
 from app.market.calendar import MarketCalendar
 from app.market.clock import SystemClock
+from app.providers.nse_reference import CSVReferenceProvider, ReferenceProvider, enrich_result
 
 
 class StockScannerService:
@@ -40,11 +41,13 @@ class StockScannerService:
         provider: MarketDataProvider,
         calendar: Optional[MarketCalendar] = None,
         clock: Optional[Clock] = None,
+        reference_provider: Optional[ReferenceProvider] = None,
     ) -> None:
         self.config = config
         self.provider = provider
-        self.calendar = calendar or MarketCalendar(market=config.ENABLED_MARKETS.split(",")[0].strip())
+        self.calendar = calendar or MarketCalendar(market=config.ENABLED_MARKETS.split(",")[0].strip(), config=config)
         self.clock = clock or SystemClock()
+        self.reference_provider = reference_provider or CSVReferenceProvider(config.NSE_REFERENCE_CSV)
 
     def run_scan(
         self, constituents: List[UniverseSymbol]
@@ -168,12 +171,16 @@ class StockScannerService:
                             score=score,
                             session_partial=indicator.session_partial,
                             bar_date=indicator.bar_date.isoformat(),
+                            day_change_pct=indicator.day_change_pct,
                         )
                     )
 
         # ======================================================================
         # Scoring & Deterministic Ranking
         # ======================================================================
+        references = self.reference_provider.load() if self.calendar.market == "NSE" else {}
+        for item in results:
+            enrich_result(item, self.config, references)
         ranked_results = rank_results(results)
         scan_seconds = round(time.perf_counter() - start_time, 2)
         logger.info(
