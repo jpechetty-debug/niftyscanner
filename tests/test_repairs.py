@@ -44,7 +44,8 @@ def setup_scheduler(markets="NSE"):
 
 @pytest.mark.asyncio
 async def test_real_open_loop_uses_scan_completion(monkeypatch):
-    _, clock, state, scheduler, scanners = setup_scheduler()
+    cfg, clock, state, scheduler, scanners = setup_scheduler()
+    cfg.REFRESH_INTERVAL_SEC = 60
     starts = []
 
     def scan(_):
@@ -339,7 +340,7 @@ async def test_settings_write_failure_preserves_runtime(monkeypatch):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
         with pytest.raises(OSError):
             await client.put("/api/settings", json={"refresh_interval_sec": 120})
-    assert cfg.REFRESH_INTERVAL_SEC == 60
+    assert cfg.REFRESH_INTERVAL_SEC == 300
 
 
 def test_unknown_snapshot_schema_uses_legacy_history(tmp_path):
