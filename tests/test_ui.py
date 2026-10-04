@@ -144,6 +144,87 @@ def test_light_workspace_search_sort_and_empty_state(monkeypatch):
     assert not page.dataframe
 
 
+@pytest.fixture
+def terminal_page(monkeypatch):
+    """Build a Streamlit test session from the labelled SYNTHETIC fixture only."""
+    import importlib
+    import json
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.syspath_prepend(str(Path("ui").resolve()))
+    client = importlib.import_module("api_client").ScreenerApiClient
+    response = json.loads(Path("tests/fixtures/ui_results_synthetic.json").read_text())
+    monkeypatch.setattr(client, "get_results", lambda *a, **k: (response, None))
+    monkeypatch.setattr(client, "get_status", lambda *a, **k: ({
+        "market_status": {"is_open": False, "is_holiday": True}, "is_scanning": False}, None))
+    monkeypatch.setattr(client, "get_settings", lambda *a, **k: (60, None))
+    return AppTest.from_file("ui/app.py"), response, client
+
+
+def test_terminal_pagination_sort_filter_reset_and_cards(terminal_page):
+    """Pagination never hides matches after a filter change; card/table views agree."""
+    page, response, _ = terminal_page
+    for index in range(4, 11):
+        response["results"].append({**response["results"][0],
+                                    "ticker": f"TEST{index}.NS", "name": f"SYNTHETIC company {index}"})
+    page.run()
+    assert not page.exception
+    first_page = page.dataframe[0].value["ticker"].tolist()
+    assert len(first_page) == 6
+    assert page.button(key="previous_NSE").disabled
+    page.button(key="next_NSE").click().run()
+    assert not page.exception
+    assert len(page.dataframe[0].value) == 4
+    assert not set(first_page) & set(page.dataframe[0].value["ticker"])
+    assert page.button(key="next_NSE").disabled
+    page.selectbox(key="sort_NSE").select("P/E").run()
+    assert page.selectbox(key="page_NSE").value == 1
+    page.text_input(key="search").set_value("SYNTHETIC Beta").run()
+    assert page.dataframe[0].value["ticker"].tolist() == ["TEST2.NS"]
+    page.radio(key="layout_NSE").set_value("Cards").run()
+    assert not page.exception
+    assert not page.dataframe
+    assert any('TEST2.NS' in item.value and 'result-card' in item.value for item in page.markdown)
+    next(button for button in page.button if button.label == "Reset filters").click().run()
+    assert page.text_input(key="search").value == ""
+    page.radio(key="layout_NSE").set_value("Table").run()
+    assert len(page.dataframe[0].value) == 6
+
+
+def test_terminal_escapes_api_text_and_preserves_partial_empty_state(terminal_page):
+    """Remote names cannot inject markup, and closed-session filters explain empty views."""
+    page, response, _ = terminal_page
+    response["results"][1]["name"] = '<img src=x onerror="alert(1)"> & company'
+    page.run()
+    assert not page.exception
+    spotlight = next(item.value for item in page.markdown if 'HIGHEST RANKED' in item.value)
+    assert '&lt;img' in spotlight and '&amp; company' in spotlight
+    assert '<img' not in spotlight
+    page.checkbox(key="partial_only").set_value(True).run()
+    assert not page.dataframe
+    assert any("No stocks match your view" in item.value for item in page.info)
+
+
+def test_terminal_busy_scan_and_cooldown_feedback(terminal_page, monkeypatch):
+    """Busy scans disable refresh; API cooldown feedback exposes the real retry delay."""
+    page, _, client = terminal_page
+    monkeypatch.setattr(client, "get_status", lambda *a, **k: ({
+        "market_status": {"is_open": True}, "is_scanning": True}, None))
+    page.run()
+    scan = next(button for button in page.button if button.label == "Scan now")
+    assert scan.disabled
+    monkeypatch.setattr(client, "get_status", lambda *a, **k: ({
+        "market_status": {"is_open": False}, "is_scanning": False}, None))
+    monkeypatch.setattr(client, "post_refresh", lambda *a, **k: (False, "Cooldown active.", 25))
+    page.run()
+    next(button for button in page.button if button.label == "Scan now").click().run()
+    assert not page.exception
+    assert any("25s" in item.value for item in page.get("toast"))
+    monkeypatch.setattr(client, "get_results", lambda *a, **k: (None, "API unavailable"))
+    page.run()
+    assert any("API unavailable" in item.value for item in page.error)
+
+
 def test_screener_api_client_error_handling(monkeypatch):
     """Test ScreenerApiClient handling of HTTP responses, 429 Retry-After, and network drops."""
     client = ScreenerApiClient(base_url="http://mock-api.local")
