@@ -63,7 +63,8 @@ A local-first, single-user stock screener that returns stocks meeting ALL of:
 
 - RSI(14) > MIN_RSI (40), and RSI is non-decreasing when REQUIRE_RSI_TREND_UP is enabled
 - Volume ratio > MIN_VOLUME_RATIO (1.5); intraday ratios use the bounded projection described in section 9
-- Finite trailing P/E in MIN_PE (-500) <= P/E < MAX_PE (50); non-positive values are permitted but receive zero valuation score
+- Finite trailing P/E in MIN_PE (1) <= P/E < MAX_PE (50); non-positive values are valid data but filtered by default. An explicit negative MIN_PE may admit them with zero valuation score.
+- Previous 20-session average volume >= MIN_AVG_VOLUME (100000); the floor is configurable and does not guarantee an executable next-open fill.
 
 Data source: yfinance only. Markets: NSE Nifty 500 (Phases 1-3), NYSE (Phase 4) through the same Universe interface. Results are ranked by a stable composite score. Runs locally, bound to 127.0.0.1 by default.
 
@@ -172,14 +173,16 @@ No threshold is a literal in code. All values below are config with these defaul
 | MIN_VOLUME_PROJECTION_ELAPSED | 0.25 | projection denominator floor, in (0, 1] |
 | VOLUME_RATIO_CAP | 10 | score normalisation |
 | VOLUME_LOOKBACK | 20 | |
-| MIN_AVG_VOLUME | 0 | 0 = off. Floor on avg20, for illiquid names |
+| MIN_AVG_VOLUME | 100000 | 0 = off. Floor on avg20, for illiquid names |
 | MAX_PE | 50 | strict `<` |
-| MIN_PE | -500 | inclusive lower bound |
+| MIN_PE | 1 | inclusive lower bound; explicit override can admit non-positive values |
 | OPTIMAL_PE | 10 | valuation-score peak; 0 < OPTIMAL_PE < MAX_PE |
 | MIN_BARS | 60 | valid Close rows required |
 | MAX_BAR_AGE_SESSIONS | 2 | stale-bar threshold |
 | WEIGHT_VOLUME / RSI / PE | 0.40 / 0.35 / 0.25 | |
 | LOG_LEVEL | INFO | |
+| HISTORY_MODE | canonical | canonical post-close history, or all for append-every-scan compatibility |
+| HISTORY_INTRADAY_INTERVAL_SEC | 0 | 0 disables intraday SQL history; positive values enable sampled slots |
 
 **Precedence:** code defaults < environment / `.env` < `data/settings.json`. `settings.json` only overrides `REFRESH_INTERVAL_SEC`. `PUT /api/settings` applies immediately and persists atomically.
 
@@ -209,7 +212,8 @@ Never generate constituents from memory. If a required file is missing: STOP and
 - Keep `Exchange == N`. Exclude `ETF == Y` and `Test Issue == Y`.
 - The file has no instrument-type column, so excluding preferred shares, warrants, units and rights is a name/symbol heuristic:
   - symbol contains `$`, or ends with `.WS`, `.WSA`, `.WSB`, `.U`, `.UN`, `.RT`, `.R`
-  - name matches case-insensitive `\b(preferred|warrants?|units?|rights?)\b`
+  - name matches case-insensitive `\b(?:preferred|warrants?|units?|rights?|notes?|debentures?|bonds?|acquisition|funds?)\b`
+- Require a common/ordinary-share or ADS/ADR description (`NYSE_REQUIRE_NAME_PATTERN`). Generic `Trust` is not an exclusion: genuine equity REIT names contain it. Both name patterns are configurable and compiled at startup; descriptions remain a heuristic, not authoritative instrument classification.
 - Patterns live in config. Log the excluded count in total and per pattern. The heuristic has known false positives and negatives; document this.
 - Convert `BRK.B` to `BRK-B` for Yahoo. Use the same `Universe` interface as NSE.
 
@@ -331,6 +335,7 @@ P = (MAX_PE - PE)/(MAX_PE-OPTIMAL_PE) otherwise
   - include a schema version
   - on startup, load it as `stale = true` until the first scan succeeds
 - SQLite `data/history.db` retains scan history and supports legacy startup restore when no valid JSON snapshot exists. JSON is the primary versioned snapshot. SQLite remains local and uses the Python standard library.
+- JSON snapshots update on every successful scan. With `HISTORY_MODE=canonical`, SQLite appends only the first completed-bar capture after `MARKET_CLOSE_SCAN_DELAY_MIN` per market/session/strategy. Optional intraday slots use `HISTORY_INTRADAY_INTERVAL_SEC`; a slot claim and its scan/signals commit atomically. Empty qualifying scans also claim their slot. Earlier history and cohort references are never pruned by this policy. Low-level `save_last_scan` callers retain explicit append-all compatibility.
 - `data/settings.json` is also written atomically; persistence failure must leave runtime settings unchanged.
 
 ---

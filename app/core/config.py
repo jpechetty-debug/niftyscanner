@@ -37,13 +37,16 @@ class Settings(BaseSettings):
     NYSE_EXCLUDE_SYMBOL_SUFFIXES: List[str] = [
         ".WS", ".WSA", ".WSB", ".U", ".UN", ".RT", ".R"
     ]
-    NYSE_EXCLUDE_NAME_PATTERN: str = r"\b(preferred|warrants?|units?|rights?)\b"
+    NYSE_EXCLUDE_NAME_PATTERN: str = r"\b(?:preferred|warrants?|units?|rights?|notes?|debentures?|bonds?|acquisition|funds?)\b"
+    NYSE_REQUIRE_NAME_PATTERN: str = r"\b(?:common\s+(?:stock|shares)|ordinary\s+shares|ADS|ADR|American\s+Depositary\s+(?:Shares|Receipts))\b"
 
     # Timing & Scheduling
     REFRESH_INTERVAL_SEC: int = 60
     MARKET_CLOSE_SCAN_DELAY_MIN: int = 20
     POST_CLOSE_RETRY_INTERVAL_SEC: int = Field(default=300, gt=0)
     REFRESH_COOLDOWN_SEC: int = 30
+    HISTORY_MODE: str = "canonical"
+    HISTORY_INTRADAY_INTERVAL_SEC: int = Field(default=0, ge=0)
 
     # Download & Data Fetching
     USE_JUGAAD_FOR_NSE: bool = False
@@ -68,11 +71,11 @@ class Settings(BaseSettings):
     MIN_VOLUME_RATIO: float = 1.5
     VOLUME_RATIO_CAP: float = 10.0
     VOLUME_LOOKBACK: int = Field(default=20, gt=0)
-    MIN_AVG_VOLUME: float = Field(default=0.0, ge=0, allow_inf_nan=False)
+    MIN_AVG_VOLUME: float = Field(default=100_000.0, ge=0, allow_inf_nan=False)
     MIN_VOLUME_PROJECTION_ELAPSED: float = 0.25
     OPTIMAL_PE: float = Field(default=10.0, gt=0, allow_inf_nan=False)
     MAX_PE: float = 50.0
-    MIN_PE: float = -500.0
+    MIN_PE: float = 1.0
     MIN_BARS: int = Field(default=60, gt=0)
     MAX_BAR_AGE_SESSIONS: int = 2
 
@@ -129,6 +132,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_business_rules(self) -> Settings:
+        import re
+        if self.HISTORY_MODE not in {"canonical", "all"}:
+            raise ValueError("HISTORY_MODE must be canonical or all")
+        try:
+            re.compile(self.NYSE_EXCLUDE_NAME_PATTERN)
+            re.compile(self.NYSE_REQUIRE_NAME_PATTERN)
+        except re.error as error:
+            raise ValueError(f"Invalid NYSE instrument pattern: {error}") from error
         if not self.enabled_markets_list or set(self.enabled_markets_list) - {"NSE", "NYSE"}:
             raise ValueError("ENABLED_MARKETS must contain NSE and/or NYSE")
         if len(self.enabled_markets_list) != len(set(self.enabled_markets_list)):

@@ -73,6 +73,15 @@ def _init_db(conn: sqlite3.Connection):
             message TEXT,
             FOREIGN KEY(scan_id) REFERENCES scans(id)
         );
+        CREATE TABLE IF NOT EXISTS scan_history_slots (
+            market TEXT NOT NULL,
+            session_date TEXT NOT NULL,
+            strategy TEXT NOT NULL,
+            slot TEXT NOT NULL,
+            scan_id INTEGER,
+            PRIMARY KEY(market, session_date, strategy, slot),
+            FOREIGN KEY(scan_id) REFERENCES scans(id)
+        );
     """)
     conn.commit()
 
@@ -106,12 +115,30 @@ def atomic_write_json(file_path: Path | str, data: Dict[str, Any]) -> None:
         Path(temp_name).unlink(missing_ok=True)
 
 
-def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data") -> Path:
-    """Persist the atomic last-scan snapshot and append SQLite history."""
+def save_last_scan(
+    market: str, payload: Dict[str, Any], data_dir: str = "data", *,
+    append_history: bool = True, history_key: tuple[str, str, str] | None = None,
+) -> Path:
+    """Always update the snapshot; optionally append an idempotent history slot.
+
+    Direct callers retain append-all compatibility. Runtime state chooses the
+    configured capture policy; old scans and signal/cohort references are kept.
+    """
     snapshot = {**payload, "schema_version": SCHEMA_VERSION}
     atomic_write_json(Path(data_dir) / f"last_scan_{market.upper()}.json", snapshot)
+    db_path = Path(data_dir) / "history.db"
+    if not append_history:
+        return db_path
     conn = _get_db_connection(data_dir)
     try:
+        conn.execute("BEGIN IMMEDIATE")
+        if history_key is not None:
+            claimed = conn.execute("""INSERT OR IGNORE INTO scan_history_slots
+                (market,session_date,strategy,slot) VALUES (?,?,?,?)""",
+                (market.upper(), *history_key)).rowcount
+            if not claimed:
+                conn.rollback()
+                return db_path
         cursor = conn.cursor()
         meta = payload.get("meta", {})
         funnel = meta.get("funnel", {})
@@ -139,6 +166,10 @@ def save_last_scan(market: str, payload: Dict[str, Any], data_dir: str = "data")
             funnel.get("passed_pe", 0)
         ))
         scan_id = cursor.lastrowid
+        if history_key is not None:
+            cursor.execute("""UPDATE scan_history_slots SET scan_id=?
+                WHERE market=? AND session_date=? AND strategy=? AND slot=?""",
+                (scan_id, market.upper(), *history_key))
         cursor.execute("UPDATE scans SET strategy_context = ? WHERE id = ?",
                        (json.dumps(payload.get("strategy_context"), sort_keys=True), scan_id))
         

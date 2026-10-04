@@ -4,13 +4,18 @@ A robust, local-first, single-user stock screening pipeline that identifies and 
 
 - **RSI(14) > 40** (`MIN_RSI`), non-decreasing when `REQUIRE_RSI_TREND_UP=true`
 - **Volume ratio > 1.5x** previous 20-session average; partial sessions use bounded linear projection (`MIN_VOLUME_PROJECTION_ELAPSED=0.25`)
-- **-500 <= trailing P/E < 50** (`MIN_PE`/`MAX_PE`); non-positive values have zero valuation score
+- **1 <= trailing P/E < 50** (`MIN_PE`/`MAX_PE`); zero/negative values are filtered by default
+- **Average daily volume >= 100,000 shares** (`MIN_AVG_VOLUME`); configurable, including 0 to disable
 
 The valuation score peaks at configurable `OPTIMAL_PE=10`. Observed volume remains unchanged; intraday projection assumes a constant trading rate and can overestimate or underestimate closing volume.
 
 Equities meeting all screening criteria are ranked via a stable composite score combining volume breakout, RSI momentum, and attractive valuation.
 
 > **Data Source Notice:** Market data is sourced via `yfinance`. `yfinance` is an unofficial library intended for personal research use only. Market data provided by `yfinance` is delayed and not real-time.
+
+SQLite history defaults to the first completed post-close capture per market, session and strategy (`HISTORY_MODE=canonical`). JSON snapshots still update on every successful scan. Set `HISTORY_INTRADAY_INTERVAL_SEC=1800` for optional half-hour samples, or `HISTORY_MODE=all` to retain every scan. Existing history is preserved. Run commands from the project root because configured data paths are relative.
+
+NYSE descriptions must identify common/ordinary shares or ADS/ADR, and exclude debt, funds and acquisition vehicles. This remains a configurable heuristic; genuine common stocks with `Trust` in their name are retained.
 
 ---
 

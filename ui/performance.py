@@ -76,4 +76,6 @@ def render_performance(client, market):
     st.caption("Entry: next session open after capture. Exit: holding-session close. "
                f'Benchmark: {data["benchmark"]} (default: Nifty 500). Split-adjusted price returns exclude cash dividends. '
                'Partial sessions are excluded; missing/delisted quotes remain unresolved. '
-               'Signals from the same day are correlated. This history cannot test stocks that never qualified.')
+               'Signals from the same day are correlated; 5- and 10-session outcomes overlap. '
+               'These are descriptive statistics, without a significance test. '
+               'This history cannot test stocks that never qualified.')

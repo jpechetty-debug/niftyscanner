@@ -16,7 +16,8 @@ def test_default_config_valid():
     assert settings.MIN_VOLUME_RATIO == 1.5
     assert settings.VOLUME_RATIO_CAP == 10.0
     assert settings.MAX_PE == 50.0
-    assert settings.MIN_PE == -500.0
+    assert settings.MIN_PE == 1.0
+    assert settings.MIN_AVG_VOLUME == 100_000.0
     assert settings.MIN_BARS == 60
     assert settings.VOLUME_LOOKBACK == 20
 

@@ -1,7 +1,7 @@
 ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol
 A|Synthetic Agilent Common Stock|N|A|N|100|N|A
 IBM|Synthetic IBM Common Stock|N|IBM|N|100|N|IBM
-BRK.B|Synthetic Berkshire Hathaway Class B|N|BRK.B|N|100|N|BRK.B
+BRK.B|Synthetic Berkshire Hathaway Class B Common Stock|N|BRK.B|N|100|N|BRK.B
 P1|Synthetic Pacific Stock|P|P1|N|100|N|P1
 Z1|Synthetic BATS Stock|Z|Z1|N|100|N|Z1
 ETF1|Synthetic SP ETF|N|ETF1|Y|100|N|ETF1

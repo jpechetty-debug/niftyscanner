@@ -116,7 +116,7 @@ def result_card_html(row: pd.Series, market: str, spotlight: bool = False) -> st
     badge = ('<div class="rank-line"><span class="rank-badge">HIGHEST RANKED</span>'
              '<span>Rank #1 in this view</span></div>') if spotlight else ''
     session = escape(str(row.get('bar_date', 'Unavailable')))
-    partial = ' · Partial session' if row.get('session_partial') else ''
+    partial = ' · Partial session · Volume indicative' if row.get('session_partial') else ''
     return (
         f'<article class="result-card {"spotlight" if spotlight else ""}"><div class="result-main">{badge}'
         f'<div class="result-identity"><strong>{escape(str(row["ticker"]))}</strong>'
@@ -157,7 +157,7 @@ def render_session_notice(meta: dict, market: str) -> None:
     if market_status.get("is_holiday"):
         message = "Market closed today. Showing the latest available session."
     elif market_status.get("is_open"):
-        message = "Market open. Yahoo Finance data is delayed and not real-time."
+        message = "Market open. Partial-session volume is projected and indicative; Yahoo quotes are delayed."
     else:
         message = "Market closed. Showing the latest available session."
     st.markdown(

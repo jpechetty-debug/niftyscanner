@@ -86,7 +86,7 @@ def apply_stage2_pe_filter(
 
     Strict inequalities per Section 1 & 10:
     - PE < MAX_PE (strict <)
-    - If MIN_PE > 0, PE >= MIN_PE
+    - PE >= MIN_PE (inclusive; default excludes zero and negative P/E)
 
     Updates funnel tracker counts.
     Returns:

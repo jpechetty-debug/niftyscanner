@@ -14,7 +14,8 @@ from tests.fixtures.synthetic_data import SYNTHETIC_UNIVERSE
 
 def test_scanner_end_to_end_synthetic():
     """Verify screening execution, funnel tracking, and filtered vs failed separation."""
-    config = Settings()
+    # This fixture targets the original 20 P/E scenario, independently of defaults.
+    config = Settings(MAX_PE=20, MIN_AVG_VOLUME=0)
     provider = FakeProvider(print_banner=False)
     clock = FakeClock(datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc))
     calendar = MarketCalendar("NSE")

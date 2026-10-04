@@ -213,7 +213,11 @@ class ScanStateManager:
         from app.performance.repository import strategy_context
         payload["strategy_context"] = strategy_context(self.config)
         try:
-            save_last_scan(market=m, payload=payload)
+            from app.cache.history import history_capture_key
+            key = history_capture_key(payload, self.config, self.calendars[m])
+            save_last_scan(market=m, payload=payload,
+                           append_history=self.config.HISTORY_MODE == "all" or key is not None,
+                           history_key=key if self.config.HISTORY_MODE == "canonical" else None)
         except Exception as e:
             logger.error(f"Failed to persist scan atomically for {m}: {e}")
 

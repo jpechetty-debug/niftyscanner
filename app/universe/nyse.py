@@ -1,11 +1,10 @@
 """NYSE Universe Loader from Nasdaq Trader 'otherlisted.txt' directory.
 
-Known Heuristic Limitations (per Section 6):
-The source file does not have an explicit security-type column. Excluding preferred
-shares, warrants, units, and rights relies on symbol suffix and regex name patterns.
-This heuristic has known false positives (e.g. companies whose standard corporate name
-contains the word 'Preferred' or 'Units') and false negatives (unorthodox preferred issues
-or warrants with non-standard ticker symbols).
+The source has no instrument-type column. Configurable name/symbol exclusions
+remove preferreds, warrants, units, rights, debt, acquisition vehicles and funds.
+An equity description (common/ordinary shares or ADS/ADR) is also required.
+"Trust" alone is retained because genuine equity REITs use that corporate name.
+Descriptions remain a heuristic with false positives and false negatives.
 """
 
 from __future__ import annotations
@@ -44,6 +43,7 @@ class NYSEUniverse(Universe):
         - Excludes symbols containing '$'
         - Excludes symbol suffixes in config.NYSE_EXCLUDE_SYMBOL_SUFFIXES
         - Excludes names matching regex in config.NYSE_EXCLUDE_NAME_PATTERN
+        - Requires an equity description matching config.NYSE_REQUIRE_NAME_PATTERN
         - Converts dot to hyphen for Yahoo (e.g. BRK.B -> BRK-B)
         """
         if not self.file_path.exists():
@@ -94,10 +94,12 @@ class NYSEUniverse(Universe):
             "symbol_dollar_sign": 0,
             "symbol_suffix": 0,
             "name_pattern": 0,
+            "missing_equity_description": 0,
         }
 
         # Compile regex from config
         name_regex = re.compile(self.config.NYSE_EXCLUDE_NAME_PATTERN, re.IGNORECASE)
+        equity_regex = re.compile(self.config.NYSE_REQUIRE_NAME_PATTERN, re.IGNORECASE)
         symbol_suffixes = tuple(s.upper() for s in self.config.NYSE_EXCLUDE_SYMBOL_SUFFIXES)
 
         symbols: List[UniverseSymbol] = []
@@ -124,6 +126,9 @@ class NYSEUniverse(Universe):
             # Heuristic 4c: Name matches preferred/warrant/unit/right regex
             if name_regex.search(name):
                 exclude_stats["name_pattern"] += 1
+                continue
+            if not equity_regex.search(name):
+                exclude_stats["missing_equity_description"] += 1
                 continue
 
             seen.add(act_sym)
