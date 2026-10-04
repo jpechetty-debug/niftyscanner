@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     WEIGHT_RSI: float = Field(default=0.35, ge=0, allow_inf_nan=False)
     WEIGHT_PE: float = Field(default=0.25, ge=0, allow_inf_nan=False)
     LOG_LEVEL: str = "INFO"
+    SQLITE_BUSY_TIMEOUT_SEC: float = Field(default=30, gt=0, le=300, allow_inf_nan=False)
 
     # Forward signal evaluation (NSE price index; independent of live screening).
     PERFORMANCE_ENABLED: bool = True
@@ -89,6 +90,7 @@ class Settings(BaseSettings):
     PERFORMANCE_BENCHMARK: str = "^CRSLDX"
     PERFORMANCE_PRICE_BASIS: str = "yahoo_split_adjusted_price"
     PERFORMANCE_BATCH_SIZE: int = Field(default=5, gt=0, le=100)
+    PERFORMANCE_SYNC_CHUNK: int = Field(default=5000, gt=0, le=50000)
     PERFORMANCE_RETRY_SEC: int = Field(default=300, gt=0)
     PERFORMANCE_MAX_RETRIES: int = Field(default=3, gt=0, le=10)
     PERFORMANCE_TIMEOUT_SEC: int = Field(default=10, gt=0, le=60)

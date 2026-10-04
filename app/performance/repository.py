@@ -26,12 +26,34 @@ def strategy_id(context: str | None) -> str:
     return "composite-v1-" + hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
+def _migrate_v2(conn: sqlite3.Connection, applied: set[int]) -> None:
+    if 2 in applied:
+        return
+    conn.execute("CREATE TABLE IF NOT EXISTS performance_sync "
+                 "(id INTEGER PRIMARY KEY CHECK(id=1), last_signal_id INTEGER NOT NULL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS performance_contexts "
+                 "(benchmark TEXT NOT NULL, price_basis TEXT NOT NULL, version TEXT NOT NULL, "
+                 "PRIMARY KEY(benchmark,price_basis,version))")
+    conn.execute("CREATE INDEX IF NOT EXISTS performance_signal_cursor ON signals(market,id)")
+    conn.execute("INSERT INTO performance_schema VALUES (2)")
+
+
 def migrate(conn: sqlite3.Connection) -> None:
     """One transaction per migration, including version marker; repeatable on restart."""
+    try:
+        applied = {row[0] for row in conn.execute("SELECT version FROM performance_schema")}
+    except sqlite3.OperationalError as error:
+        if "no such table" not in str(error):
+            raise
+        applied = set()
+    if {1, 2} <= applied:
+        return
     with conn:
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("CREATE TABLE IF NOT EXISTS performance_schema (version INTEGER PRIMARY KEY)")
-        if conn.execute("SELECT 1 FROM performance_schema WHERE version=1").fetchone():
+        applied = {row[0] for row in conn.execute("SELECT version FROM performance_schema")}
+        if 1 in applied:
+            _migrate_v2(conn, applied)
             return
         if "strategy_context" not in {r[1] for r in conn.execute("PRAGMA table_info(scans)")}:
             conn.execute("ALTER TABLE scans ADD COLUMN strategy_context TEXT")
@@ -65,16 +87,18 @@ def migrate(conn: sqlite3.Connection) -> None:
         for statement in statements:
             conn.execute(statement)
         conn.execute("INSERT INTO performance_schema VALUES (1)")
+        _migrate_v2(conn, {1})
 
 
 class PerformanceRepository:
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = "data", busy_timeout_sec: float | None = None):
         self.data_dir = data_dir
+        self.busy_timeout_sec = busy_timeout_sec
 
     @contextmanager
     def connection(self):
         from app.cache.persistence import _get_db_connection
-        conn = _get_db_connection(self.data_dir)
+        conn = _get_db_connection(self.data_dir, busy_timeout_sec=self.busy_timeout_sec)
         try:
             with conn:
                 yield conn

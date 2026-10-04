@@ -33,5 +33,6 @@ Thumbs.db
 
 data/history.db
 data/*.db
+data/*.db-*
 data/yfinance-cache/
 scratch_*.py

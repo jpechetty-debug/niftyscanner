@@ -12,12 +12,21 @@ from loguru import logger
 
 SCHEMA_VERSION = 1
 
-def _get_db_connection(data_dir: str) -> sqlite3.Connection:
+def _get_db_connection(data_dir: str, busy_timeout_sec: float | None = None) -> sqlite3.Connection:
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     db_path = Path(data_dir) / "history.db"
-    conn = sqlite3.connect(str(db_path))
+    if busy_timeout_sec is None:
+        from app.core.config import load_settings
+        busy_timeout_sec = load_settings().SQLITE_BUSY_TIMEOUT_SEC
+    conn = sqlite3.connect(str(db_path), timeout=busy_timeout_sec)
     conn.row_factory = sqlite3.Row
-    _init_db(conn)
+    try:
+        if conn.execute("PRAGMA journal_mode").fetchone()[0].lower() != "wal":
+            conn.execute("PRAGMA journal_mode=WAL")
+        _init_db(conn)
+    except Exception:
+        conn.close()
+        raise
     return conn
 
 def _init_db(conn: sqlite3.Connection):

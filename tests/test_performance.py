@@ -231,7 +231,7 @@ def test_transaction_rollback_and_original_rows_preserved(setup):
     with repo.connection() as conn:
         assert conn.execute("SELECT count(*) FROM signal_cohorts").fetchone()[0] == 1
         assert conn.execute("SELECT count(*) FROM signals").fetchone()[0] == 1
-        assert conn.execute("SELECT count(*) FROM performance_schema").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM performance_schema").fetchone()[0] == 2
 
 
 def test_delisted_name_does_not_starve_batches_and_catchup(setup):

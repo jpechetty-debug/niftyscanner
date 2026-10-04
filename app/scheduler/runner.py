@@ -289,9 +289,21 @@ class Scheduler:
 
     async def evaluate_performance_if_idle(self):
         """Scanning has priority; outcome downloads share the global provider lock."""
-        if not self.performance or self._reserved_market or self.state.scan_lock.locked():
+        if (not self.performance or self._reserved_market or self.state.scan_lock.locked()
+                or getattr(self, "_stopping", False)):
             return
         if "NSE" in self.calendars and self.calendars["NSE"].is_market_open(self.clock.now()):
+            return
+        preflight = getattr(self.performance, "is_due", None)
+        if preflight is not None:
+            try:
+                if not await asyncio.to_thread(preflight):
+                    return
+            except Exception as error:
+                logger.warning(f"Outcome due-check failed: {error}")
+                return
+        # A manual reservation, active scan, or shutdown may arrive during preflight.
+        if self._reserved_market or self.state.scan_lock.locked() or getattr(self, "_stopping", False):
             return
         async with self.state.scan_lock:
             try:
