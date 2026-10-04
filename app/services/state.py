@@ -233,7 +233,7 @@ class ScanStateManager:
         logger.warning(f"Scan for {m} failed. Retaining prior results with stale=True.")
 
     def get_next_refresh_at(self, market: str) -> Optional[datetime]:
-        """Stable completion-based deadline, including today's one post-close scan."""
+        """Stable completion-based deadline, including failed post-close retries."""
         m = market.upper()
         if self.is_scanning.get(m, False):
             return None
@@ -250,7 +250,12 @@ class ScanStateManager:
                 return None
             deadline = completed + timedelta(seconds=self.get_effective_interval_sec(m))
             return deadline if deadline <= close else target
-        return target if completed is None or completed < target else None
+        successful = self.last_successful_scan_at.get(m)
+        if successful is not None and successful >= target:
+            return None
+        if self.last_scan_failed.get(m, False) and completed is not None:
+            return max(target, completed + timedelta(seconds=self.config.POST_CLOSE_RETRY_INTERVAL_SEC))
+        return target
 
     def get_results_payload(self, market: str) -> Dict[str, Any]:
         """Construct full JSON response format required by Section 17 for a market."""

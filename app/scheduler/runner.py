@@ -218,8 +218,8 @@ class Scheduler:
                     if cal.calendar.is_session(local_date_str):
                         close_ts = cal.calendar.session_close(cal.calendar.date_to_session(local_date_str))
                         target = close_ts + timedelta(minutes=self.config.MARKET_CLOSE_SCAN_DELAY_MIN)
-                        completed = self.state.last_scan_completed_at.get(market)
-                        if completed is not None and completed >= target:
+                        successful = self.state.last_successful_scan_at.get(market)
+                        if successful is not None and successful >= target:
                             self._post_close_done[market] = local_date_str
 
         while not self._stop_event.is_set():
@@ -253,22 +253,24 @@ class Scheduler:
                         post_close_target = close_ts + timedelta(
                             minutes=self.config.MARKET_CLOSE_SCAN_DELAY_MIN
                         )
-                        completed = self.state.last_scan_completed_at.get(market)
-                        if completed is not None and completed >= post_close_target:
+                        successful = self.state.last_successful_scan_at.get(market)
+                        if successful is not None and successful >= post_close_target:
                             self._post_close_done[market] = local_date_str
 
                         now_ts = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
+                        retry_at = self.state.get_next_refresh_at(market)
                         if (
-                            now_ts >= post_close_target
+                            retry_at is not None
+                            and now_ts >= retry_at
                             and self._post_close_done.get(market) != local_date_str
                         ):
                             logger.info(
                                 f"[{market}] Triggering scheduled post-close scan "
                                 f"({self.config.MARKET_CLOSE_SCAN_DELAY_MIN}m after close)..."
                             )
-                            await self.execute_scan(market)
+                            ok = await self.execute_scan(market)
                             completed = self.state.last_scan_completed_at.get(market)
-                            if completed is not None and completed >= post_close_target:
+                            if ok and completed is not None and completed >= post_close_target:
                                 self._post_close_done[market] = local_date_str
 
             # Sleep 15s or until manual trigger/stop

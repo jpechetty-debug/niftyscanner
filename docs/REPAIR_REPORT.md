@@ -97,3 +97,103 @@ Known issues: upstream deprecation warning; live behavior unverified.
 Next step: re-read docs/SPEC.md before any separately authorized phase.
 Stopped after this repair phase; no next phase started.
 ```
+
+
+# Follow-up: retry failed post-close scans
+
+The earlier "one post-close attempt" behavior was a bug; this follow-up supersedes that description and its test expectations. A day is now done only after a successful scan at/after its final-scan target. Startup and manual successes satisfy the requirement. Failures retain stale results and schedule another automatic attempt after POST_CLOSE_RETRY_INTERVAL_SEC (default 300 seconds), measured from completion. The existing session-date gating remains. Results/status expose that pending retry through next_refresh_at.
+
+Modified files: .env.example, app/core/config.py, app/scheduler/runner.py, app/services/state.py, docs/SPEC.md, tests/test_repairs.py, docs/REPAIR_REPORT.md. No blockers. Assumption: five minutes is the default minimum automatic retry delay; manual refresh retains its existing cooldown.
+
+Commands executed: CodeGraph exploration; Get-Content docs/SPEC.md/config/report; targeted pytest; full pytest; git diff/check/status; rg documentation references; verified workspace-only temporary-directory cleanup.
+
+```text
+.venv/Scripts/python.exe -m pytest tests/test_repairs.py tests/test_scheduler.py -q -p no:cacheprovider --basetemp=.post-close-test-1 --tb=short
+32 passed in 2.66s
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider --basetemp=.post-close-test-2 --tb=short
+104 passed, 1 warning in 3.25s
+git diff --check: exit 0
+```
+
+VERIFIED: actual scheduler loop for pre-/post-close startup failures; repeated failures at configurable 90/300-second intervals; no premature done flag; stop after successful retry; manual success recognition; retry metadata and positive config validation; full offline suite.
+NOT VERIFIED: live Yahoo recovery or live market operation. One existing Starlette/AnyIO deprecation warning remains.
+
+| SPEC section | Status | Note |
+|---|---|---|
+| 0 Operating rules | Done | One focused correction; spec re-read and results recorded. |
+| 5 Configuration | Done | Positive POST_CLOSE_RETRY_INTERVAL_SEC=300, exposed in env example. |
+| 15 Refresh | Done | Successful completion required; failed scans retry with completion-based backoff. |
+| 17 API | Done | next_refresh_at reflects the pending post-close retry. |
+| 20 Tests | Done | Fake-clock failure/recovery/backoff regressions; 104 tests passed. |
+
+```text
+STATE SUMMARY
+Phase completed: post-close retry correction.
+.env.example: add default retry interval.
+app/core/config.py: validate positive POST_CLOSE_RETRY_INTERVAL_SEC.
+app/scheduler/runner.py: use success timestamps; backoff; success-only done flag.
+app/services/state.py: expose pending retry deadlines after failed scans.
+docs/SPEC.md: require retry until post-close success within the session date.
+tests/test_repairs.py: failure, recovery, custom backoff and metadata regressions.
+docs/REPAIR_REPORT.md: correction evidence and handoff.
+Public signatures unchanged: Scheduler.execute_scan(market='NSE') -> bool;
+ScanStateManager.get_next_refresh_at(market: str) -> Optional[datetime].
+Config added: POST_CLOSE_RETRY_INTERVAL_SEC=300 (>0).
+Decision: retry delay measured from failed completion; manual cooldown unchanged.
+Known issues: upstream deprecation warning; live recovery unverified.
+Next step: re-read docs/SPEC.md before any separately authorized phase.
+Stopped after this correction; no next phase started.
+```
+
+# Live verification: prepared, awaiting real session
+
+Requested: one real NSE scan during market hours and one after close. Preparation on Sunday, 2026-10-04 at approximately 11:08 IST found the exchange closed. No real scan has run in this phase. The existing real universe loads 501 constituents. The application's XBOM calendar proxy gives the next session as Monday, 2026-10-05, 09:15–15:30 IST.
+
+Created `scripts/live_verify.py`; modified this report. The helper uses SystemClock and the configured real provider/universe, executes exactly one NSE scan through Scheduler.execute_scan, and captures the validated HTTP API responses in `logs/live_verification/<session>_<mode>.json`. It rejects the wrong window, retains existing attempts, and checks a new success timestamp, current-session freshness, session_partial flags and the post-close refresh deadline. Background scheduling is disabled for this verification process. Successful scans also update the application's normal snapshot/history. API requests use the in-process ASGI transport; this does not verify browser behavior or a listening server.
+
+Created and inspected active chat follow-up `verify-real-nse-scans`, scheduled for weekdays at 11:00 and 16:00 IST. Intended first pair: Monday, October 5. The follow-up checks the actual exchange window, skips holidays/missed windows, records each attempt once and pauses after the pair or a failure. No automatic repeated live scans are authorized by this follow-up. Local execution requires the computer and app running, plus Yahoo network access. Timing is a scheduled intention, not executed evidence.
+
+Commands/actions executed: full docs/SPEC.md read; CodeGraph exploration; clock/calendar and real-universe preflight; existing automation inspection; helper execution in both modes; py_compile; automation creation/view; git status and git diff --check. Final helper check output:
+
+```text
+NSE market-hours: 2026-10-04T11:08:37.182761+05:30, in_window=False
+Deferred: no Yahoo requests made outside the requested window.
+market-hours exit: 2
+NSE post-close: 2026-10-04T11:08:38.804992+05:30, in_window=False
+Deferred: no Yahoo requests made outside the requested window.
+post-close exit: 2
+compile exit: 0
+```
+
+VERIFIED: real local calendar/universe preflight; Sunday window refusal; Python compilation; active follow-up configuration. NOT VERIFIED: live Yahoo access, either requested live scan, live session freshness, browser behavior or live failure recovery. No synthetic or clock-shifted scan is counted as live evidence. No additional automated test suite was run for this verification helper.
+
+Assumptions: NSE is the requested market; use the existing user-provided universe and configured thresholds. A post-close verification must start after the configured close delay, not during pre-open or on a non-session day. Each mode records one attempt; failures require attention rather than silently passing.
+
+| SPEC section | Status | Evidence |
+|---|---|---|
+| 0 Operating discipline | Done for preparation | Spec re-read; one live-verification phase remains pending. |
+| 1–2 Data/calendar integrity | Prepared | Real universe and SystemClock; wrong windows refused; XBOM proxy disclosed. |
+| 13 session_partial | Pending live | Helper validates flags against actual session time. |
+| 15 Refresh | Pending live | One real worker scan per window; final deadline checked after success. |
+| 17 API | Pending live | Results/status response validation included in future capture. |
+
+```text
+STATE SUMMARY
+Phase: requested live verification, pending actual session.
+Created: scripts/live_verify.py.
+Modified: docs/REPAIR_REPORT.md.
+Unrelated existing changes preserved.
+Live Yahoo requests in this phase: zero.
+Real universe preflight: 501 constituents loaded.
+Actual current time: Sunday 2026-10-04, NSE closed.
+Next calendar session: Monday 2026-10-05 09:15–15:30 IST.
+Follow-up: verify-real-nse-scans, ACTIVE, this chat.
+Intended checks: Monday 11:00 IST and 16:00 IST.
+Helper checks: both correctly deferred (exit 2); py_compile exit 0.
+Evidence destination: logs/live_verification/<session>_<mode>.json.
+Success criteria: actual scan success, fresh session data, correct metadata.
+Known limitation: requires running local computer/app and Yahoo access.
+Live verification is NOT complete; no live pass claimed.
+Next scheduled run: re-read spec, inspect existing evidence, run eligible mode.
+Stop condition: both attempts completed, or a failure needs user attention.
+```

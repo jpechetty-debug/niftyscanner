@@ -70,23 +70,78 @@ async def test_real_open_loop_uses_scan_completion(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_post_close_failure_is_attempted_once(monkeypatch):
-    _, clock, _, scheduler, scanners = setup_scheduler()
-    scanners["NSE"].run_scan.return_value = ([], FunnelCounts(), [], 0, 0.0, False)
-    waits = 0
+@pytest.mark.parametrize("after_close_startup", [False, True])
+@pytest.mark.parametrize("retry_interval", [90, 300])
+async def test_post_close_failures_retry_with_backoff(monkeypatch, after_close_startup, retry_interval):
+    cfg, clock, state, scheduler, scanners = setup_scheduler()
+    cfg.POST_CLOSE_RETRY_INTERVAL_SEC = retry_interval
+    target = datetime(2026, 10, 1, 10, 20, tzinfo=timezone.utc)
+    if after_close_startup:
+        clock.set_time(target)
+    initial = clock.now()
+    starts = []
+
+    def fail(_):
+        starts.append(clock.now())
+        return [], FunnelCounts(), [], 0, 0.0, False
+
+    scanners["NSE"].run_scan.side_effect = fail
+    ticks = iter([target, target + timedelta(seconds=15),
+                  target + timedelta(seconds=retry_interval - 1), target + timedelta(seconds=retry_interval),
+                  target + timedelta(seconds=retry_interval + 15), target + timedelta(seconds=retry_interval * 2), None])
 
     async def advance(waiter, timeout):
-        nonlocal waits
         waiter.close()
-        waits += 1
-        clock.set_time(datetime(2026, 10, 1, 10, 20 + waits - 1, tzinfo=timezone.utc))
-        if waits == 3:
+        tick = next(ticks)
+        if tick is None:
             scheduler._stop_event.set()
+        else:
+            clock.set_time(tick)
         raise asyncio.TimeoutError
 
     monkeypatch.setattr(asyncio, "wait_for", advance)
     await scheduler._run_loop()
-    assert scanners["NSE"].run_scan.call_count == 2  # startup + post-close
+    expected = [target, target + timedelta(seconds=retry_interval), target + timedelta(seconds=retry_interval * 2)]
+    if not after_close_startup:
+        expected.insert(0, initial)
+    assert starts == expected
+    assert scheduler._post_close_done["NSE"] is None
+    assert state.evaluate_stale("NSE")[0]
+    deadline = target + timedelta(seconds=retry_interval * 3)
+    assert state.get_next_refresh_at("NSE") == deadline
+    assert state.get_results_payload("NSE")["meta"]["next_refresh_at"] == deadline.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_post_close_retry_success_stops_further_attempts(monkeypatch):
+    _, clock, state, scheduler, scanners = setup_scheduler()
+    target = datetime(2026, 10, 1, 10, 20, tzinfo=timezone.utc)
+    clock.set_time(target)
+    starts = []
+
+    def scan(_):
+        starts.append(clock.now())
+        return [], FunnelCounts(), [], 0, 0.0, len(starts) > 1
+
+    scanners["NSE"].run_scan.side_effect = scan
+    ticks = iter([target + timedelta(seconds=299), target + timedelta(seconds=300),
+                  target + timedelta(seconds=315), target + timedelta(seconds=600), None])
+
+    async def advance(waiter, timeout):
+        waiter.close()
+        tick = next(ticks)
+        if tick is None:
+            scheduler._stop_event.set()
+        else:
+            clock.set_time(tick)
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(asyncio, "wait_for", advance)
+    await scheduler._run_loop()
+    assert starts == [target, target + timedelta(seconds=300)]
+    assert scheduler._post_close_done["NSE"] == "2026-10-01"
+    assert state.get_next_refresh_at("NSE") is None
+    assert not state.evaluate_stale("NSE")[0]
 
 
 @pytest.mark.asyncio
@@ -99,6 +154,7 @@ async def test_manual_scan_after_close_satisfies_scheduled_attempt(monkeypatch):
         waiter.close()
         waits += 1
         clock.set_time(datetime(2026, 10, 1, 10, 21, tzinfo=timezone.utc))
+        state.last_successful_scan_at["NSE"] = clock.now()
         state.last_scan_completed_at["NSE"] = clock.now()
         if waits == 2:
             scheduler._stop_event.set()
@@ -164,7 +220,8 @@ def test_next_deadline_is_stable_and_settings_reschedule():
     assert state.get_next_refresh_at("NSE") == state.last_scan_completed_at["NSE"] + timedelta(seconds=120)
     clock.set_time(datetime(2026, 10, 1, 10, 5, tzinfo=timezone.utc))
     assert state.get_next_refresh_at("NSE") == datetime(2026, 10, 1, 10, 20, tzinfo=timezone.utc)
-    state.last_scan_completed_at["NSE"] = datetime(2026, 10, 1, 10, 20, tzinfo=timezone.utc)
+    state.last_successful_scan_at["NSE"] = datetime(2026, 10, 1, 10, 20, tzinfo=timezone.utc)
+    state.last_scan_completed_at["NSE"] = state.last_successful_scan_at["NSE"]
     assert state.get_next_refresh_at("NSE") is None
 
 
@@ -295,6 +352,7 @@ def test_unknown_snapshot_schema_uses_legacy_history(tmp_path):
 
 
 @pytest.mark.parametrize("values", [{"CHUNK_SIZE": 0}, {"PE_WORKERS": 0}, {"MAX_RETRIES": 0},
+                                  {"POST_CLOSE_RETRY_INTERVAL_SEC": 0}, {"POST_CLOSE_RETRY_INTERVAL_SEC": -1},
                                   {"SCAN_MIN_FETCH_RATIO": 1.1}, {"WEIGHT_PE": -0.25},
                                   {"CHUNK_DELAY_MIN_SEC": 3}, {"OPTIMAL_PE": 50}, {"MIN_PE": float("nan")}])
 def test_invalid_operational_config_fails_fast(values):

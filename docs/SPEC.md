@@ -152,7 +152,8 @@ No threshold is a literal in code. All values below are config with these defaul
 | NSE_UNIVERSE_PATH | data/nifty500.csv | |
 | NYSE_UNIVERSE_PATH | data/otherlisted.txt | |
 | REFRESH_INTERVAL_SEC | 60 | allowed 30-300 |
-| MARKET_CLOSE_SCAN_DELAY_MIN | 20 | one scan this long after close |
+| MARKET_CLOSE_SCAN_DELAY_MIN | 20 | successful final scan this long after close |
+| POST_CLOSE_RETRY_INTERVAL_SEC | 300 | minimum automatic retry delay after a failed scan completes |
 | REFRESH_COOLDOWN_SEC | 30 | manual refresh spacing |
 | CHUNK_SIZE | 100 | |
 | CHUNK_DELAY_MIN_SEC / MAX_SEC | 1 / 2 | plus jitter |
@@ -341,7 +342,7 @@ P = (MAX_PE - PE)/(MAX_PE-OPTIMAL_PE) otherwise
 - Scans run in a worker thread (`asyncio.to_thread`) because yfinance is synchronous. The event loop must stay responsive, so `/api/results` never hangs during a scan.
 - Interval is measured from scan completion.
 - `effective_interval = max(REFRESH_INTERVAL_SEC, 2 x last_scan_seconds)`.
-- **Market-hours gating:** scan while the market is open; one attempt `MARKET_CLOSE_SCAN_DELAY_MIN` after close; once at startup. When closed, no scheduled scans: serve the last result with `market_status = closed`. Manual refresh is still allowed when closed.
+- **Market-hours gating:** scan while the market is open; a final successful scan `MARKET_CLOSE_SCAN_DELAY_MIN` after close; failed scans retry until success on that session date, with `POST_CLOSE_RETRY_INTERVAL_SEC` measured from failure completion; once at startup. When closed, only the pending final scan/retries are scheduled: serve the last result with `market_status = closed`. Manual refresh is still allowed when closed.
 - **Stale:** true while awaiting startup success, while a breaker is open, or after a failed scan. During market hours, age > `3 x effective_interval` also sets stale. When closed, a success captured after the last session close remains fresh; otherwise it is stale. TTL expiry alone never sets stale. Expose `stale_reasons`.
 - CLI and scan meta report `scan_seconds` and request counts. Counts measure ticker download attempts and Ticker.info attempts, including retries and adjustment refetches; they are not a count of internal HTTP requests.
 - Manual refresh reserves the global scan slot before returning 202. Shutdown drains accepted scans. Universe loading and disk persistence run off the event loop.
@@ -398,7 +399,7 @@ Response models are Pydantic. Timestamps are ISO 8601 with offset.
   "failed_symbols": []
 }
 ```
-`next_refresh_at` is the stable completion-based deadline, or the pending post-close target. It is null during a scan or when no scan is scheduled. Status also exposes this field. `data_as_of` is the latest fetched daily bar at exchange-local midnight (ISO 8601 with offset), even when no stocks qualify; it is distinct from `last_refreshed`. A 429 includes both the Retry-After header and `detail.retry_after`.
+`next_refresh_at` is the stable completion-based deadline, or the pending post-close target/retry deadline. Post-close completion requires a successful scan at or after the target, including startup/manual successes. Failed startup/manual scans also apply the retry delay. It is null during a scan or when no scan is scheduled. Status also exposes this field. `data_as_of` is the latest fetched daily bar at exchange-local midnight (ISO 8601 with offset), even when no stocks qualify; it is distinct from `last_refreshed`. A 429 includes both the Retry-After header and `detail.retry_after`.
 
 **Result fields:** ticker, name, market, price, pe, rsi, volume, avg_volume_20d, volume_ratio, score, session_partial, bar_date.
 
