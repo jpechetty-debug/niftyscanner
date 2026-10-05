@@ -41,6 +41,14 @@ class ScanResultItem(BaseModel):
     reference_date: Optional[str] = None
     pe_reference: Optional[float] = None
     pe_check_status: str = "unavailable"
+    # Scan-to-scan change tracking (section 24); defaults keep older snapshots loadable.
+    is_new: bool = False
+    first_seen_at: Optional[str] = None
+    scans_qualified: int = 1
+    # Weighted score contributions (section 25); they sum to `score`. None in older snapshots.
+    score_volume: Optional[float] = None
+    score_rsi: Optional[float] = None
+    score_pe: Optional[float] = None
 
 
 @runtime_checkable

@@ -177,8 +177,8 @@ def compute_volume_metrics(
 
     try:
         current_volume = int(latest_val)
-    except (ValueError, TypeError):
-        return None, None, None, FailureCode.INVALID_VOLUME, f"Latest bar volume is non-numeric: {latest_val}"
+    except (ValueError, TypeError, OverflowError):
+        return None, None, None, FailureCode.INVALID_VOLUME, f"Latest bar volume is non-numeric or infinite: {latest_val}"
 
     if current_volume <= 0:
         return None, None, None, FailureCode.INVALID_VOLUME, (

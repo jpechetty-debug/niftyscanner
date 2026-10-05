@@ -27,6 +27,7 @@ RESULTS_POLL_SEC = 10
 def filter_results_dataframe(
     df: pd.DataFrame, search_query: str, min_rsi: Optional[float],
     min_vol_ratio: Optional[float], max_pe: Optional[float], partial_only: bool,
+    new_only: bool = False,
 ) -> pd.DataFrame:
     """Narrow API results only when the user enables a filter."""
     if df.empty:
@@ -46,7 +47,43 @@ def filter_results_dataframe(
         filtered = filtered[filtered["pe"] <= max_pe]
     if partial_only:
         filtered = filtered[filtered["session_partial"]]
+    if new_only:
+        filtered = filtered[filtered["is_new"].fillna(False).astype(bool)] if "is_new" in filtered else filtered.iloc[0:0]
     return filtered
+
+
+TRACK_RECORD_HORIZON = 5
+
+
+def score_mix_label(row) -> str:
+    """Weighted contributions behind the composite score, e.g. 'Vol 0.32 · RSI 0.10 · P/E 0.08'."""
+    parts = [(label, row.get(key)) for label, key in
+             (("Vol", "score_volume"), ("RSI", "score_rsi"), ("P/E", "score_pe"))]
+    if any(value is None or pd.isna(value) for _, value in parts):
+        return "Unavailable"
+    return " · ".join(f"{label} {value:.2f}" for label, value in parts)
+
+
+def track_record_label(score, buckets: Optional[list]) -> str:
+    """How earlier signals in the same score band did against the benchmark (gross, resolved only)."""
+    if not buckets or score is None or pd.isna(score):
+        return "No history"
+    for bucket in buckets:
+        low, high = bucket.get("low"), bucket.get("high")
+        if (low is None or score >= low) and (high is None or score < high):
+            valid = bucket.get("valid", 0)
+            if not valid or bucket.get("hit_rate") is None:
+                return "No history"
+            text = f"{bucket['hit_rate']:.0f}% beat index · n={valid}"
+            return text + " (low sample)" if bucket.get("low_sample") else text
+    return "No history"
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_score_buckets(market: str) -> Optional[list]:
+    """Track record changes at most nightly; cache it rather than query every results poll."""
+    data, _ = api_client.get_score_buckets(market=market, horizon=TRACK_RECORD_HORIZON)
+    return data.get("buckets") if data and data.get("supported") else None
 
 
 def format_scan_time(value: Optional[str], market: str) -> str:
@@ -122,11 +159,17 @@ def result_card_html(row: pd.Series, market: str, spotlight: bool = False) -> st
         caution = ' · Near supplied price band'
     if row.get('pe_check_status') == 'divergent':
         caution += ' · P/E reference differs'
+    if pd.notna(row.get('is_new', False)) and bool(row.get('is_new', False)):
+        caution = ' · NEW since last scan' + caution
+    elif (row.get('scans_qualified') or 1) > 1:
+        caution = f" · Qualified {int(row['scans_qualified'])} scans in a row" + caution
     return (
         f'<article class="result-card {"spotlight" if spotlight else ""}"><div class="result-main">{badge}'
         f'<div class="result-identity"><strong>{escape(str(row["ticker"]))}</strong>'
         f'<span>{escape(str(row["name"]))}</span></div>'
-        f'<div class="card-detail">Data session: {session}{partial}{caution}</div></div>'
+        f'<div class="card-detail">Data session: {session}{partial}{caution}</div>'
+        f'<div class="card-detail">Score mix: {escape(score_mix_label(row))}'
+        f'{" · Past record: " + escape(str(row["track_record"])) if row.get("track_record") else ""}</div></div>'
         f'<div class="result-stats">{stats}</div></article>')
 
 
@@ -173,6 +216,23 @@ def render_session_notice(meta: dict, market: str) -> None:
         unsafe_allow_html=True)
 
 
+def describe_changes(meta: dict, market: str) -> Optional[str]:
+    """One-line summary of entries and exits since the previous successful scan, or None."""
+    if not meta.get("changes_compared_to"):
+        return None
+    new = meta.get("new_entries") or []
+    dropped = [item.get("ticker", "") for item in (meta.get("dropped") or [])]
+    since = format_scan_time(meta.get("changes_compared_to"), market)
+    if not new and not dropped:
+        return f"No changes since the previous scan ({since})."
+    parts = []
+    if new:
+        parts.append(f"{len(new)} new: {', '.join(new[:8])}{' …' if len(new) > 8 else ''}")
+    if dropped:
+        parts.append(f"{len(dropped)} dropped: {', '.join(dropped[:8])}{' …' if len(dropped) > 8 else ''}")
+    return f"Since previous scan ({since}): " + " · ".join(parts)
+
+
 def move_result_page(market: str, delta: int) -> None:
     """Advance a paginated view using Streamlit's widget callback order."""
     st.session_state[f"page_{market}"] += delta
@@ -180,7 +240,7 @@ def move_result_page(market: str, delta: int) -> None:
 
 def reset_view_filters() -> None:
     """Reset only the optional view filters, leaving backend settings intact."""
-    for key, value in {"search": "", "partial_only": False, "refine": False,
+    for key, value in {"search": "", "partial_only": False, "new_only": False, "refine": False,
                        "min_rsi": 0.0, "min_volume": 0.0, "limit_pe": False, "max_pe": 0.0}.items():
         st.session_state[key] = value
 
@@ -247,6 +307,8 @@ def main() -> None:
         market = st.selectbox("Market universe", ["NSE", "NYSE"],
                               format_func=lambda name: "NSE · Nifty 500" if name == "NSE" else "NYSE · US equities")
         search = st.text_input("Search stocks", placeholder="Ticker or company name", key="search")
+        new_only = st.checkbox("New since last scan only", key="new_only",
+                               help="Stocks that did not qualify in the previous successful scan.")
         refine = st.toggle("Use indicator filters", value=False, key="refine")
         with st.expander(f"Momentum · {int(refine)} active", expanded=True):
             rsi = st.slider("Minimum RSI", 0.0, 100.0, 0.0, 1.0, disabled=not refine, key="min_rsi")
@@ -273,13 +335,14 @@ def main() -> None:
                     '<br>NSE session calendar uses the XBOM proxy.</div>', unsafe_allow_html=True)
     live_status_and_countdown_fragment(market)
     results_fragment(market, search, rsi if refine else None, volume if refine else None,
-                     pe if refine and limit_pe else None, partial_only)
+                     pe if refine and limit_pe else None, partial_only, new_only)
 
 
 @st.fragment(run_every=RESULTS_POLL_SEC)
 def results_fragment(
     market: str, search_query: str, min_rsi: Optional[float],
     min_vol_ratio: Optional[float], max_pe: Optional[float], partial_only: bool,
+    new_only: bool = False,
 ) -> None:
     """Render qualified results, clear empty states, light charts and scan details."""
     response, error = api_client.get_results(market=market)
@@ -294,8 +357,15 @@ def results_fragment(
     render_session_notice(meta, market)
     if meta.get("stale"):
         st.warning("Saved results may be outdated. " + "; ".join(meta.get("stale_reasons", []) or ["Awaiting a successful scan."]))
+    change_line = describe_changes(meta, market)
+    if change_line:
+        st.caption(change_line)
     df = pd.DataFrame(results)
-    filtered = filter_results_dataframe(df, search_query, min_rsi, min_vol_ratio, max_pe, partial_only)
+    if not df.empty:
+        buckets = load_score_buckets(market)
+        df["score_mix"] = df.apply(score_mix_label, axis=1)
+        df["track_record"] = df["score"].apply(lambda value: track_record_label(value, buckets))
+    filtered = filter_results_dataframe(df, search_query, min_rsi, min_vol_ratio, max_pe, partial_only, new_only)
     best = None
     if not filtered.empty:
         best = filtered.sort_values(["score", "volume_ratio", "ticker"], ascending=[False, False, True]).iloc[0]
@@ -325,7 +395,7 @@ def results_fragment(
                                      file_name=f"screener_{market}_{datetime.now():%Y%m%d_%H%M%S}.csv",
                                      mime="text/csv", on_click="ignore", icon=":material/download:")
             page_key = f"page_{market}"
-            signature = (search_query, min_rsi, min_vol_ratio, max_pe, partial_only, sort)
+            signature = (search_query, min_rsi, min_vol_ratio, max_pe, partial_only, new_only, sort)
             if st.session_state.get(f"view_signature_{market}") != signature:
                 st.session_state[page_key] = 1
                 st.session_state[f"view_signature_{market}"] = signature
@@ -337,7 +407,7 @@ def results_fragment(
                 page = st.session_state[page_key]
                 offset = (page - 1) * 6
                 page_rows = filtered.iloc[offset:offset + 6]
-                columns = ["ticker", "name", "score", "price", "day_change_pct", "rsi", "volume_ratio", "pe", "circuit_risk_status", "pe_check_status", "session_partial", "bar_date"]
+                columns = ["ticker", "is_new", "scans_qualified", "name", "score", "score_mix", "track_record", "price", "day_change_pct", "rsi", "volume_ratio", "pe", "circuit_risk_status", "pe_check_status", "session_partial", "bar_date"]
                 if volume_details:
                     columns += ["volume", "avg_volume_20d", "market", "circuit_risk_reason", "reference_source", "pe_reference"]
                 view = page_rows[[name for name in columns if name in filtered]].copy()
@@ -365,8 +435,12 @@ def results_fragment(
                     st.dataframe(styled_view, width="stretch", hide_index=True, row_height=44,
                              column_config={
                                  "ticker": st.column_config.TextColumn("Ticker", width=140),
+                                 "is_new": st.column_config.CheckboxColumn("New", width=70, help="Did not qualify in the previous successful scan."),
+                                 "scans_qualified": st.column_config.NumberColumn("Streak", width=80, format="%d", help="Consecutive successful scans this stock has qualified in."),
                                  "name": st.column_config.TextColumn("Company", width=220),
                                  "score": st.column_config.NumberColumn("Score", width=90, format="%.4f"),
+                                 "score_mix": st.column_config.TextColumn("Score mix", width=200, help="Weighted volume, RSI and P/E contributions; they add up to the score."),
+                                 "track_record": st.column_config.TextColumn(f"Past {TRACK_RECORD_HORIZON}-day record", width=190, help=f"Earlier resolved signals in the same score band: share that beat the Nifty 500 over {TRACK_RECORD_HORIZON} sessions (gross, next-open entry). Descriptive only; not a forecast."),
                                  "price": st.column_config.NumberColumn(f"Price ({CURRENCY.get(market, '')})", width=110, format="%.2f"),
                                  "rsi": st.column_config.ProgressColumn("RSI", width=140, min_value=0, max_value=100, format="%.1f"),
                                  "volume_ratio": st.column_config.NumberColumn("Volume ratio (×)", width=140, format="%.2f", help="Compared with completed-session average. Partial-session ratios use a bounded projection."),

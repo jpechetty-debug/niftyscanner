@@ -48,3 +48,16 @@ async def performance(request: Request, market: str = "NSE",
         start.isoformat() if start else None, end.isoformat() if end else None, strategy, return_basis)
     report["scheduler_running"] = request.app.state.scheduler.is_running
     return report
+
+
+@router.get("/performance/score-buckets")
+async def score_buckets(request: Request, market: str = "NSE", horizon: int = 5):
+    """Historical resolved outcomes per score band, for per-row context in the results view."""
+    from app.api.routes import validate_market_parameter
+    market = validate_market_parameter(market, request.app.state.config.enabled_markets_list)
+    if horizon not in (1, 5, 10):
+        raise HTTPException(422, "Horizon must be 1, 5 or 10 sessions")
+    service = request.app.state.performance
+    if market != "NSE" or service is None:
+        return {"supported": False, "horizon": horizon, "buckets": []}
+    return await asyncio.to_thread(service.score_track_record, horizon)

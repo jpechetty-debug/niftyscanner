@@ -50,6 +50,18 @@ class ScreenerApiClient:
         except Exception as error:
             return None, f"Unable to load performance: {error}"
 
+    def get_score_buckets(self, market: str = "NSE", horizon: int = 5):
+        """Resolved outcomes per score band; (None, message) when unavailable."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/performance/score-buckets",
+                                      params={"market": market, "horizon": horizon})
+                if response.status_code == 200:
+                    return response.json(), None
+                return None, f"Track record unavailable (HTTP {response.status_code})."
+        except Exception as error:
+            return None, f"Unable to load track record: {error}"
+
     def get_status(self, market: str = "NSE") -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetch overall system status, breaker states, and staleness."""
         url = f"{self.base_url}/api/status"

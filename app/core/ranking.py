@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Tuple
 from app.core.config import Settings
 from app.core.interfaces import ScanResultItem
 
 
-def calculate_composite_score(
+def score_components(
     volume_ratio: float,
     rsi: float,
     pe: float,
     config: Settings,
-) -> float:
-    """Calculate composite screening score per Section 12.
+) -> Tuple[float, float, float]:
+    """Weighted (volume, RSI, P/E) contributions per Section 12; they sum to the composite score.
 
     Formula:
     V = (volume_ratio - MIN_VOLUME_RATIO) / (VOLUME_RATIO_CAP - MIN_VOLUME_RATIO)
@@ -21,7 +21,7 @@ def calculate_composite_score(
     P = dynamic piecewise function punishing <=0 or >=MAX_PE and peaking at P/E=10
 
     All components are clipped to [0.0, 1.0].
-    Score = W_V * V + W_R * R + W_P * P
+    Returns (W_V * V, W_R * R, W_P * P).
     """
     v_raw = (volume_ratio - config.MIN_VOLUME_RATIO) / (config.VOLUME_RATIO_CAP - config.MIN_VOLUME_RATIO)
     v_clip = min(max(v_raw, 0.0), 1.0)
@@ -38,12 +38,17 @@ def calculate_composite_score(
             p_clip = (config.MAX_PE - pe) / (config.MAX_PE - optimal_pe)
     p_clip = min(max(p_clip, 0.0), 1.0)
 
-    score = (
-        config.WEIGHT_VOLUME * v_clip
-        + config.WEIGHT_RSI * r_clip
-        + config.WEIGHT_PE * p_clip
-    )
-    return score
+    return (config.WEIGHT_VOLUME * v_clip, config.WEIGHT_RSI * r_clip, config.WEIGHT_PE * p_clip)
+
+
+def calculate_composite_score(
+    volume_ratio: float,
+    rsi: float,
+    pe: float,
+    config: Settings,
+) -> float:
+    """Composite score per Section 12: the sum of the weighted components."""
+    return sum(score_components(volume_ratio, rsi, pe, config))
 
 
 def rank_results(results: List[ScanResultItem]) -> List[ScanResultItem]:

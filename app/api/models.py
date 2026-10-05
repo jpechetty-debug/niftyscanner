@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core.interfaces import ScanResultItem
 from app.core.outcomes import FailedSymbolItem, FunnelCounts
+from app.services.changes import DroppedItem
 
 
 class MetaInfo(BaseModel):
@@ -22,6 +23,9 @@ class MetaInfo(BaseModel):
     scan_seconds: float
     request_count: int
     funnel: FunnelCounts
+    new_entries: List[str] = Field(default_factory=list)
+    dropped: List[DroppedItem] = Field(default_factory=list)
+    changes_compared_to: Optional[str] = None
 
 
 class ResultsResponse(BaseModel):

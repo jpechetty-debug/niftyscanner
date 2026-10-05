@@ -30,11 +30,13 @@ class Scheduler:
         calendars: Optional[Union[MarketCalendar, Dict[str, MarketCalendar]]] = None,
         clock: Optional[Clock] = None,
         performance_service=None,
+        alerter=None,
     ) -> None:
         self.config = config
         self.state = state_manager
         self.clock = clock or SystemClock()
         self.performance = performance_service
+        self.alerter = alerter
 
         # Handle scanners
         scanners_arg = scanner_services or scanner_service
@@ -144,6 +146,11 @@ class Scheduler:
                         persist=False,
                     )
                     await asyncio.to_thread(self.state.persist_last_scan, m)
+                    if self.alerter is not None:
+                        try:
+                            await asyncio.to_thread(self.alerter.notify, m, results)
+                        except Exception as error:  # alerts are best-effort, never a scan failure
+                            logger.warning(f"[{m}] Alert dispatch failed: {error}")
                 else:
                     self.state.update_scan_failure(
                         market=m,

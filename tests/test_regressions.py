@@ -283,3 +283,56 @@ def test_volume_projection_floor_is_validated_and_caps_multiplier():
     vol = pd.Series([100000.0] * 21 + [4000.0])
     _, _, ratio, *_ = compute_volume_metrics(vol, 20, elapsed_fraction=0.01, min_elapsed_fraction=0.25)
     assert abs(ratio - 0.16) < 1e-9  # 4000 / 0.25 / 100000, not 4000 / 0.01 / 100000
+
+
+def test_bar_cache_forces_refetch_when_delta_does_not_overlap():
+    from app.cache.bar_cache import BarCache
+
+    cache = BarCache()
+    cache.set_bars("A.NS", _bars([100.0, 101.0, 102.0, 103.0, 104.0]))
+    # Next 5d fetch starts weeks later: stitching would silently drop the skipped sessions.
+    gapped = _bars([110.0, 111.0, 112.0], start="2026-10-01")
+    assert cache.is_consistent("A.NS", gapped) is False
+
+
+def test_bar_cache_merge_keeps_full_download_length():
+    from app.cache.bar_cache import BarCache
+
+    cache = BarCache()
+    full = _bars(list(np.linspace(100, 200, 125)), start="2026-04-01")
+    cache.update_bars("A.NS", full)
+    delta = full.tail(5).copy()
+    merged = cache.update_bars("A.NS", delta)
+    assert len(merged) == 125  # MIN_BARS up to the 6mo window must survive later scans
+
+
+def test_inf_volume_is_invalid_volume_not_crash():
+    from app.core.indicators import compute_volume_metrics
+
+    *_, code, _ = compute_volume_metrics(pd.Series([1000.0] * 20 + [float("inf")]))
+    assert code == FailureCode.INVALID_VOLUME
+
+
+def test_one_malformed_frame_does_not_abort_scan():
+    from app.providers.fake_provider import FakeProvider
+    from app.services.scanner import StockScannerService
+    from tests.fixtures.synthetic_data import SYNTHETIC_UNIVERSE
+
+    class BrokenFrameProvider(FakeProvider):
+        def download_bars(self, tickers):
+            bars, count, failures = super().download_bars(tickers)
+            bars["TEST1.NS"] = bars["TEST1.NS"].drop(columns=["Volume"])  # KeyError inside indicators
+            return bars, count, failures
+
+    scanner = StockScannerService(
+        config=Settings(MAX_PE=20, MIN_AVG_VOLUME=0),
+        provider=BrokenFrameProvider(print_banner=False),
+        calendar=MarketCalendar("NSE"),
+        clock=FakeClock(datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc)),
+    )
+    results, funnel, failures, *_, is_success = scanner.run_scan(SYNTHETIC_UNIVERSE)
+    assert is_success is True
+    broken = [f for f in failures if f.ticker == "TEST1.NS"]
+    assert broken and broken[0].code == FailureCode.UNKNOWN and broken[0].stage == Stage.INDICATORS
+    assert "TEST1.NS" not in {r.ticker for r in results}
+    assert funnel.failed == len(failures)

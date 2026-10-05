@@ -17,6 +17,7 @@ from app.market.calendar import MarketCalendar
 from app.market.clock import SystemClock
 from app.providers.yfinance_provider import YFinanceProvider
 from app.scheduler.runner import Scheduler
+from app.services.alerts import WebhookAlerter
 from app.services.scanner import StockScannerService
 from app.services.state import ScanStateManager
 from app.performance.service import PerformanceService
@@ -119,6 +120,7 @@ def create_app(
         calendars=calendars,
         clock=clk,
         performance_service=performance,
+        alerter=WebhookAlerter(cfg),
     )
 
     @asynccontextmanager

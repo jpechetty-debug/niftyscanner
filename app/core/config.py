@@ -121,6 +121,19 @@ class Settings(BaseSettings):
     PERFORMANCE_OTHER_COST_BPS: float = Field(default=1, ge=0, le=1000, allow_inf_nan=False)
     PERFORMANCE_SLIPPAGE_BPS: float = Field(default=5, ge=0, le=1000, allow_inf_nan=False)
 
+    # New-signal alerts (section 24). Empty URL disables outbound alerts entirely.
+    ALERT_WEBHOOK_URL: str = ""
+    ALERT_INCLUDE_PARTIAL: bool = True
+    ALERT_TIMEOUT_SEC: float = Field(default=5, gt=0, le=30, allow_inf_nan=False)
+
+    @field_validator("ALERT_WEBHOOK_URL")
+    @classmethod
+    def validate_alert_webhook_url(cls, v: str) -> str:
+        v = v.strip()
+        if v and not v.lower().startswith(("http://", "https://")):
+            raise ValueError("ALERT_WEBHOOK_URL must be empty or an http(s) URL")
+        return v
+
     @model_validator(mode="after")
     def validate_nse_context(self) -> Settings:
         from datetime import date

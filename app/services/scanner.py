@@ -26,7 +26,7 @@ from app.core.outcomes import (
     FunnelTracker,
     Stage,
 )
-from app.core.ranking import calculate_composite_score, rank_results
+from app.core.ranking import rank_results, score_components
 from app.market.calendar import MarketCalendar
 from app.market.clock import SystemClock
 from app.providers.nse_reference import CSVReferenceProvider, ReferenceProvider, enrich_result
@@ -98,16 +98,21 @@ class StockScannerService:
                 bar_timestamp = index.max().normalize()
                 latest_data_date = max(latest_data_date, bar_timestamp) if latest_data_date is not None else bar_timestamp
                 self.data_as_of = latest_data_date.isoformat()
-            indicator, fail_code, fail_msg = compute_indicators(
-                df=df,
-                current_dt=current_dt,
-                calendar=self.calendar,
-                rsi_period=self.config.RSI_PERIOD,
-                volume_lookback=self.config.VOLUME_LOOKBACK,
-                min_bars=self.config.MIN_BARS,
-                max_bar_age_sessions=self.config.MAX_BAR_AGE_SESSIONS,
-                min_volume_projection_elapsed=self.config.MIN_VOLUME_PROJECTION_ELAPSED,
-            )
+            try:
+                indicator, fail_code, fail_msg = compute_indicators(
+                    df=df,
+                    current_dt=current_dt,
+                    calendar=self.calendar,
+                    rsi_period=self.config.RSI_PERIOD,
+                    volume_lookback=self.config.VOLUME_LOOKBACK,
+                    min_bars=self.config.MIN_BARS,
+                    max_bar_age_sessions=self.config.MAX_BAR_AGE_SESSIONS,
+                    min_volume_projection_elapsed=self.config.MIN_VOLUME_PROJECTION_ELAPSED,
+                )
+            except Exception as error:
+                # One malformed frame is a symbol-level data failure, not a systemic scan failure.
+                logger.warning(f"Indicator calculation crashed for {ticker}: {error}")
+                indicator, fail_code, fail_msg = None, FailureCode.UNKNOWN, f"Indicator calculation error: {error}"
 
             if fail_code is not None:
                 tracker.record_failure(
@@ -150,12 +155,13 @@ class StockScannerService:
                     indicator = stage1_survivors[ticker]
                     u_sym = symbol_map[ticker]
 
-                    score = calculate_composite_score(
+                    parts = score_components(
                         volume_ratio=indicator.volume_ratio,
                         rsi=indicator.rsi,
                         pe=pe_value,
                         config=self.config,
                     )
+                    score = sum(parts)
 
                     results.append(
                         ScanResultItem(
@@ -169,6 +175,9 @@ class StockScannerService:
                             avg_volume_20d=indicator.avg_volume_20d,
                             volume_ratio=indicator.volume_ratio,
                             score=score,
+                            score_volume=parts[0],
+                            score_rsi=parts[1],
+                            score_pe=parts[2],
                             session_partial=indicator.session_partial,
                             bar_date=indicator.bar_date.isoformat(),
                             day_change_pct=indicator.day_change_pct,

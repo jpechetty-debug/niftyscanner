@@ -17,6 +17,7 @@ from app.core.interfaces import Clock, ScanResultItem
 from app.core.outcomes import FailedSymbolItem, FunnelCounts
 from app.market.calendar import MarketCalendar
 from app.market.clock import SystemClock
+from app.services.changes import ScanChanges, annotate_changes
 
 
 class ScanStateManager:
@@ -68,6 +69,7 @@ class ScanStateManager:
         self.results_store: Dict[str, List[ScanResultItem]] = {m: [] for m in self.markets}
         self.failures_store: Dict[str, List[FailedSymbolItem]] = {m: [] for m in self.markets}
         self.funnel_store: Dict[str, FunnelCounts] = {m: FunnelCounts() for m in self.markets}
+        self.changes_store: Dict[str, ScanChanges] = {m: ScanChanges() for m in self.markets}
 
         # Startup disk loaded state tracking per market
         self._loaded_from_disk_stale: Dict[str, bool] = {m: False for m in self.markets}
@@ -90,6 +92,11 @@ class ScanStateManager:
                     meta = disk_data.get("meta", {})
                     raw_funnel = meta.get("funnel", {})
                     self.funnel_store[market] = FunnelCounts(**raw_funnel)
+                    self.changes_store[market] = ScanChanges(
+                        new_entries=meta.get("new_entries") or [],
+                        dropped=meta.get("dropped") or [],
+                        compared_to=meta.get("changes_compared_to"),
+                    )
 
                     self.data_as_of[market] = meta.get("data_as_of", "")
                     self.last_scan_seconds[market] = meta.get("scan_seconds", 0.0)
@@ -191,6 +198,9 @@ class ScanStateManager:
         """Store successful scan results and persist atomically to disk."""
         m = market.upper()
         now = self.clock.now()
+        # Diff against the previous success before it is replaced; marks the result items in place.
+        self.changes_store[m] = annotate_changes(
+            self.results_store.get(m, []), results, self.last_successful_scan_at.get(m), now)
         self.last_successful_scan_at[m] = now
         self.last_scan_completed_at[m] = now
         self.data_as_of[m] = data_as_of
@@ -283,6 +293,7 @@ class ScanStateManager:
         funnel = self.funnel_store.get(m, FunnelCounts())
         results = self.results_store.get(m, [])
         failures = self.failures_store.get(m, [])
+        changes = self.changes_store.get(m, ScanChanges())
 
         meta = {
             "market": m,
@@ -296,6 +307,9 @@ class ScanStateManager:
             "scan_seconds": self.last_scan_seconds.get(m, 0.0),
             "request_count": self.last_scan_request_count.get(m, 0),
             "funnel": funnel.model_dump(),
+            "new_entries": list(changes.new_entries),
+            "dropped": [item.model_dump() for item in changes.dropped],
+            "changes_compared_to": changes.compared_to,
         }
 
         return {

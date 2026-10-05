@@ -31,11 +31,15 @@ class BarCache:
         auto_adjust=True rewrites ALL history on every split/dividend, so stitching a fresh 5-day
         delta onto old cached bars would create a fake price jump (and corrupt RSI).
         The newest bar is skipped because it can still change intraday.
+        A delta with no shared date may hide skipped sessions, so it also forces a full refetch.
         """
         cached = self._cache.get(ticker)
-        if cached is None or new_df is None or new_df.empty or "Close" not in new_df.columns:
+        if cached is None or cached.empty or new_df is None or new_df.empty or "Close" not in new_df.columns:
             return True
-        overlap = cached.index.intersection(new_df.index)[:-1] if len(new_df) > 1 else []
+        shared = cached.index.intersection(new_df.index)
+        if len(shared) == 0:
+            return False
+        overlap = shared[:-1]
         if len(overlap) == 0:
             return True
         old = cached.loc[overlap, "Close"].astype(float)
@@ -61,8 +65,8 @@ class BarCache:
         combined = combined[~combined.index.duplicated(keep='last')]
         combined.sort_index(inplace=True)
         
-        # Keep up to 100 bars (more than enough for 60-bar requirement)
-        combined = combined.tail(100)
+        # Never shrink below the full download, so MIN_BARS > 100 keeps working after merges
+        combined = combined.tail(max(len(cached_df), 100))
         
         self._cache[ticker] = combined
         return combined

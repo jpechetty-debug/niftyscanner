@@ -510,3 +510,25 @@ This extension implements the user's request to complete the missing review item
 - Performance API: `return_basis=gross|net`, default gross; expose selected basis/cost assumptions and both gross/net metrics for resolved rows. Buckets and hit rates follow the selected basis. Preserve stored gross returns, unresolved/pending coverage and original signal records. Net deducts costs from stock cash flows; the price index remains gross.
 - All cost rates are configurable basis points: `PERFORMANCE_BUY_STT_BPS=10`, `PERFORMANCE_SELL_STT_BPS=10`, `PERFORMANCE_STAMP_BPS=1.5`, `PERFORMANCE_BROKERAGE_BPS=0`, `PERFORMANCE_OTHER_COST_BPS=1`, `PERFORMANCE_SLIPPAGE_BPS=5`. Nonnegative finite rates <=1000 bp each. Slippage applies each side; stamp applies buy only; brokerage/other costs each side. Apply the configured rates uniformly across reported history and disclose fixed-fee/rounding/size limitations.
 - UI remains HTTP-only and displays source uncertainty, band caution and gross/estimated net controls. Neither risk context nor costs alter live screening scores.
+
+---
+
+# 24. SCAN-TO-SCAN CHANGES AND NEW-SIGNAL ALERTS (October 2026)
+
+User-authorized extension. Screening filters, scores, ranking, funnel and history semantics are unchanged.
+
+- **Baseline:** each successful scan is compared with the previous successful scan of the same market (in memory, or the restored startup snapshot). Failed scans never compare, and neither extend nor break streaks. With no baseline, nothing is flagged new or dropped.
+- **Result fields:** `is_new` (absent from the previous successful scan), `first_seen_at` (ISO 8601 start of the current consecutive qualifying streak), `scans_qualified` (successful scans in that streak). Defaults `false` / `null` / `1` keep older snapshots loadable. Included in results, export CSV and the JSON snapshot.
+- **Meta fields:** `new_entries` (tickers), `dropped` (`{ticker, name}` in previous rank order), `changes_compared_to` (previous `last_refreshed`, or null without a baseline). Restored with the snapshot.
+- **Alerts:** optional, disabled unless `ALERT_WEBHOOK_URL` (empty or http(s)) is set. After a successful scan is persisted, one JSON POST lists that scan's new entries not already alerted for the same market and session (`bar_date`). `ALERT_INCLUDE_PARTIAL=true` (default) includes partial-session rows, which are flagged in the message; false limits alerts to completed bars. `ALERT_TIMEOUT_SEC=5` (0 < x <= 30). Delivery is best-effort: failures are logged without the URL, retried on the next scan, and never change scan success, stale state or stored results. Dedupe is in memory; a restart may resend a stock that re-qualifies. Every alert carries the delayed-data and not-financial-advice notice. Alerts are never sent from `--offline` / `FakeProvider` CLI runs.
+- **UI:** "New" and "Streak" columns, a NEW marker on cards, a changes strip (new and dropped since the previous scan), and a "New since last scan" view filter. HTTP-only, as in section 18.
+
+---
+
+# 25. SCORE BREAKDOWN AND SCORE-BAND TRACK RECORD (October 2026)
+
+User-authorized extension. Filters, scores and ranking are unchanged; nothing here feeds back into screening.
+
+- **Result fields:** `score_volume`, `score_rsi`, `score_pe` are the weighted section 12 contributions (`W_V*V`, `W_R*R`, `W_P*P`); they sum to `score`. Null in older snapshots. Included in results and export CSV.
+- **Endpoint:** `GET /api/performance/score-buckets?market=NSE&horizon=5` (horizon 1/5/10; same 422/404 market rules). Read-only: no sync, no price download. Per `PERFORMANCE_SCORE_EDGES` band: `low`, `high` (null = unbounded), `valid` (resolved outcomes), `hit_rate` (% with excess return > 0), `mean_excess`, `low_sample` (< `PERFORMANCE_MIN_SAMPLE`). Gross returns, current benchmark/basis/version only. NYSE returns `supported: false`.
+- **UI:** "Score mix" and "Past 5-day record" columns plus card detail. Labelled descriptive and not a forecast; low samples flagged; "No history" when a band has no resolved outcomes. Bands are cached in the UI for 300 s. HTTP-only.

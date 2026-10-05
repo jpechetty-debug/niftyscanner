@@ -261,3 +261,159 @@ Live scans: still NOT VERIFIED; existing scheduled follow-up remains active.
 Next phase first step: re-read docs/SPEC.md before further authorized changes.
 Stopped after UI improvement; no additional development phase started.
 ```
+
+
+# Live verification: market-hours scan completed on October 5, 2026
+
+One real NSE scan completed during the requested market-hours window. Existing verification evidence was inspected first; no prior attempt was present. Used the current configuration, actual SystemClock/calendar, user-supplied universe and Yahoo provider. No timestamps, market data or constituents were fabricated; no application behavior changed. The eligible universe now contains 497 symbols after the loader excludes one DUMMY placeholder and three RR units.
+
+Created evidence: `logs/live_verification/2026-10-05_market-hours.json`. Modified this report; the scan also refreshed the normal NSE last-scan snapshot via the application's existing persistence path. No code/config changes were made. SQLite history follows the current configured policy; no new SQL-history row is claimed here.
+
+Command executed (with required Yahoo network and workspace write access):
+
+```text
+.venv/Scripts/python.exe -u -m scripts.live_verify --mode market-hours
+Started: 2026-10-05T11:04:41.915038+05:30
+Completed: 2026-10-05T11:05:25.435568+05:30
+Screening complete: 31 qualified stocks identified in 41.93s across 544 provider attempts.
+verified: true; validation_errors: []; command exit: 0
+```
+
+Actual results:
+
+| Check | Result |
+|---|---|
+| Eligible universe / fetched | 497 / 497 |
+| Filtered RSI / volume / liquidity | 344 / 106 / 0 |
+| Passed RSI and volume | 47 |
+| Filtered P/E / qualified | 16 / 31 |
+| Failed symbols / failure records | 0 / 0 |
+| Data session | 2026-10-05T00:00:00+05:30 |
+| stale / stale reasons | False / [] |
+| Current-session partial bars | 31 of 31 |
+| Results / status HTTP responses | 200 / 200 |
+| Download / P/E breakers | CLOSED / CLOSED |
+| next_refresh_at | 2026-10-05T11:10:25.435568+05:30 |
+
+Counts represent provider ticker/info attempts, not underlying HTTP calls. No scan was repeated. Preflight-only diagnostics did not make Yahoo requests: an incorrect calendar keyword was corrected to the installed signature, and a stalled read-only preflight was stopped before the actual scan. CodeGraph exploration was attempted first but its database could not be opened in the current sandbox, so the relevant helper/calendar source was read directly. No offline test suite was run in this live-verification continuation.
+
+VERIFIED: one real market-hours NSE scan; full eligible-universe bar fetch; successful new scan timestamp; fresh session date; all qualified bars partial; no failures; validated results/status responses and next-refresh metadata. NOT VERIFIED: the post-close scan, live failure/recovery/backoff, independent data accuracy, executable prices or trading fills. Yahoo is delayed and unofficial; intraday volume/projections are incomplete/indicative.
+
+Assumptions: verify the configured eligible universe, not excluded placeholders/units; one recorded market-hours attempt satisfies this half of the request. The 16:00 IST post-close follow-up remains active, subject to the actual session close plus configured delay. This pair is not yet complete.
+
+| SPEC section | Status | Note |
+|---|---|---|
+| 0 Operating discipline | Partial | Spec re-read; evidence recorded; live pair still pending. |
+| 2/6 Data integrity and universe | Done | Existing real file; configured exclusions; no fabricated data. |
+| 7/9 Provider and session_partial | Done | Real Yahoo provider/SystemClock; current-session flags checked. |
+| 15/16 Refresh and market status | Partial | Open-market scan/deadline verified; post-close pending. |
+| 17 API | Done | Both HTTP response models validated, 200/200. |
+
+```text
+STATE SUMMARY
+Phase: requested live verification, market-hours half completed.
+Evidence: logs/live_verification/2026-10-05_market-hours.json.
+Report modified: docs/REPAIR_REPORT.md.
+Runtime persistence: application's normal NSE last-scan snapshot updated.
+Code/config/API signatures unchanged; no new configuration keys.
+Actual start IST: 2026-10-05T11:04:41.915038+05:30.
+Actual completion IST: 2026-10-05T11:05:25.435568+05:30.
+Scan exit 0; verified true; validation errors empty.
+Universe/fetched: 497/497; qualified: 31; failed: 0.
+Provider attempts: 544; scanner duration: 41.93s.
+Session: 2026-10-05; partial flags: 31/31 true; stale false.
+API results/status: 200/200; both breakers CLOSED.
+Next refresh IST: 2026-10-05T11:10:25.435568+05:30.
+Automation verify-real-nse-scans remains active.
+Remaining: one eligible post-close scan, intended today at 16:00 IST.
+Next step: re-read spec and inspect existing evidence before post-close attempt.
+Do not repeat this market-hours scan automatically.
+Pause follow-up after both attempts, or any failed/invalid scan.
+Known limits: delayed Yahoo data; live recovery and post-close not verified.
+```
+
+
+# Live verification: same-session pair completed on October 5, 2026
+
+The requested real market-hours and post-close NSE attempts are VERIFIED in the same session. Existing evidence was inspected first; the market-hours scan was not repeated. This continuation ran exactly one post-close scan with SystemClock, YFinanceProvider, and the existing real universe. The configured calendar close is 2026-10-05T15:30:00+05:30; configured delay is 20 minutes, making the final-scan target 2026-10-05T15:50:00+05:30. The scan started after that target. No application code, configuration, timestamps, market data, or constituents were changed or fabricated. No blockers.
+
+Files created/modified: `logs/live_verification/2026-10-05_post-close.json` created; this report appended. Normal scan persistence updated the NSE snapshot and logged a SQLite persistence operation; historical slot creation was not independently audited. The earlier market-hours evidence remains retained. Automation `verify-real-nse-scans` was changed from ACTIVE to PAUSED; the app confirmed PAUSED.
+
+Commands executed: PowerShell read existing evidence, AGENTS.md, full SPEC.md, automation configuration and report; CodeGraph explored the helper; `.venv\Scripts\python.exe -u -m scripts.live_verify --mode post-close` with PYTHONDONTWRITEBYTECODE=1 and approved network/write escalation; Python independently validated both saved evidence files and the actual calendar target before appending this section. No scan retries or offline test suite were run. An initial automation-file read used an unset CODEX_HOME; the explicit existing path was then read successfully.
+
+Relevant actual scan output (exit 0):
+
+```text
+NSE post-close: 2026-10-05T16:02:54.154286+05:30, in_window=True
+NSE universe exclusions: 1 DUMMY placeholder(s), 3 series-RR REIT/InvIT unit(s)
+Loaded 497 symbols
+Starting Stage 1 download for 497 symbols...
+Successfully fetched bar history for 497 symbols.
+Stage 1 complete: 31 symbols passed RSI & Volume thresholds.
+Starting Stage 2 P/E fetch for 31 survivors...
+Screening complete: 23 qualified stocks identified in 38.38s across 528 requests.
+Persisted scan results for NSE to SQLite database.
+verified: true; errors: []; command exit: 0
+```
+
+| Evidence check | Market-hours | Post-close |
+|---|---|---|
+| Actual start IST | 2026-10-05T11:04:41.915038+05:30 | 2026-10-05T16:02:54.154286+05:30 |
+| Actual completion IST | 2026-10-05T11:05:25.435568+05:30 | 2026-10-05T16:03:34.022790+05:30 |
+| Universe / fetched | 497 / 497 | 497 / 497 |
+| Scanner duration / provider attempts | 41.93s / 544 | 38.38s / 528 |
+| RSI / volume / liquidity filtered | 344 / 106 / 0 | 336 / 130 / 0 |
+| RSI-volume survivors / P/E filtered / qualified | 47 / 16 / 31 | 31 / 8 / 23 |
+| Failed symbols / failure records | 0 / 0 | 0 / 0 |
+| Bar dates / data_as_of | 2026-10-05 / 2026-10-05T00:00:00+05:30 | 2026-10-05 / 2026-10-05T00:00:00+05:30 |
+| session_partial | 31 of 31 true | 23 of 23 false |
+| market_status / stale / stale reasons | open / false / [] | closed / false / [] |
+| last_refreshed IST | 2026-10-05T11:05:25.428055+05:30 | 2026-10-05T16:03:34.001814+05:30 |
+| next_refresh_at IST | 2026-10-05T11:10:25.435568+05:30 | null in results and status |
+| Results / status HTTP | 200 / 200 | 200 / 200 |
+| Download / P/E breaker | CLOSED / CLOSED | CLOSED / CLOSED |
+| verified / validation errors | true / [] | true / [] |
+
+Universe SHA256 is identical for both attempts: `2959bf206239284e145f7aecc65095b18d11556d2642323a70f2d26efe0f5cb3`. Provider attempt counts measure ticker download/info attempts, not internal HTTP requests. Evidence JSON retains complete result rows, flags, failure lists and metadata.
+
+Verification results: independent saved-evidence assertions passed for both scans, matching session and universe hash, full fetch counts, funnel/row counts, no failures, fresh dates, expected partial flags, HTTP responses and post-close target/null deadline. VERIFIED: the requested live scan pair and successful final-scan metadata. NOT VERIFIED: live failure/recovery/backoff, continuous background scheduler operation, independent exchange-feed accuracy, trading fills or completeness of all future holiday/special-session calendars. Yahoo remains delayed and unofficial; the partial-session morning volume ratios are indicative.
+
+Assumptions: full universe means the configured eligible equities after documented DUMMY/RR exclusions. One recorded successful attempt per window completes this request. No additional scans are needed.
+
+| SPEC section | Status | Note |
+|---|---|---|
+| 0 Operating discipline | Done | Spec re-read; commands, real output, checks, assumptions and state recorded. |
+| 2/6 Data integrity and universe | Done | Existing real universe; matching hash; no fabrication. |
+| 7/9 Provider and session_partial | Done | Real Yahoo/SystemClock; open and closed flags verified. |
+| 14 Persistence | Partial | Normal snapshot/SQLite operation logged; historical slots not independently audited. |
+| 15/16 Refresh and market status | Done | Both eligible windows; fresh data; successful final scan has no pending deadline. |
+| 17 API | Done | Results/status responses validated, HTTP 200/200. |
+| 20 Tests | Partial | Executed live evidence assertions; no additional offline suite in this verification task. |
+
+```text
+STATE SUMMARY
+Phase: authorized live verification completed.
+Created: logs/live_verification/2026-10-05_post-close.json (real scan/API evidence).
+Modified: docs/REPAIR_REPORT.md (completed-pair evidence).
+Retained: logs/live_verification/2026-10-05_market-hours.json.
+Runtime writes: normal NSE snapshot and logged SQLite persistence.
+Public classes/functions/signatures changed: none.
+Configuration keys added/changed: none.
+Session: 2026-10-05; existing real NSE universe, 497 eligible symbols.
+SystemClock and Yahoo provider; no fake timestamps/data/constituents.
+Market-hours completion IST: 2026-10-05T11:05:25.435568+05:30.
+Market-hours: 497 fetched, 31 qualified, failed 0, partial true for 31/31.
+Post-close start IST: 2026-10-05T16:02:54.154286+05:30.
+Post-close target IST: 2026-10-05T15:50:00+05:30.
+Post-close completion IST: 2026-10-05T16:03:34.022790+05:30.
+Post-close: 497 fetched, 23 qualified, failed 0, partial false for 23/23.
+Post-close duration: 38.38s; provider attempts: 528.
+Both scan commands exit 0; verified true; validation errors empty.
+Both results/status HTTP 200; stale false; breakers CLOSED.
+Final next_refresh_at: null in results and status.
+Independent evidence/calendar assertions: passed.
+Automation verify-real-nse-scans: PAUSED (app confirmed).
+Do not repeat either recorded attempt automatically.
+Known limits: delayed Yahoo; live retry/recovery and feed accuracy not verified.
+Next phase: none authorized; await a separate user request.
+```

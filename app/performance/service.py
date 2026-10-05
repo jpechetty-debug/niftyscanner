@@ -338,6 +338,31 @@ class PerformanceService:
                 "duplicates_removed": max(0,raw-cohorts), "summary": self.summarize(rows),
                 "groups": groups, "outcomes": rows, "job": dict(job) if job else None}
 
+    def score_track_record(self, horizon=5):
+        """Resolved gross outcomes per PERFORMANCE_SCORE_EDGES band: a cheap read, no sync or download."""
+        if horizon not in HORIZONS:
+            raise ValueError("Horizon must be 1, 5 or 10 sessions")
+        with self.repository.connection() as conn:
+            rows = conn.execute("""SELECT c.score,o.excess_return FROM signal_cohorts c
+                JOIN signal_outcomes o ON o.cohort_id=c.id WHERE o.status='resolved' AND o.horizon=?
+                AND o.benchmark=? AND o.price_basis=? AND o.evaluation_version=?""",
+                (horizon, *self._context())).fetchall()
+        edges = [float(x) for x in self.config.PERFORMANCE_SCORE_EDGES.split(",")]
+        bounds = [-math.inf, *edges, math.inf]
+        buckets = []
+        for low, high in zip(bounds, bounds[1:]):
+            excess = [r["excess_return"] for r in rows if r["score"] is not None and math.isfinite(r["score"])
+                      and low <= r["score"] < high and r["excess_return"] is not None]
+            buckets.append({
+                "low": None if low == -math.inf else low, "high": None if high == math.inf else high,
+                "valid": len(excess),
+                "hit_rate": 100 * sum(x > 0 for x in excess) / len(excess) if excess else None,
+                "mean_excess": statistics.mean(excess) if excess else None,
+                "low_sample": len(excess) < self.config.PERFORMANCE_MIN_SAMPLE,
+            })
+        return {"supported": True, "horizon": horizon, "benchmark": self.config.PERFORMANCE_BENCHMARK,
+                "buckets": buckets}
+
     def summarize(self, rows):
         valid = [r for r in rows if r["status"] == "resolved"]
         eligible = sum(r["status"] != "excluded" for r in rows)
