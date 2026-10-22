@@ -300,8 +300,89 @@ def live_status_and_countdown_fragment(market: str) -> None:
                 request_scan(market)
 
 
+def render_macro_bar() -> None:
+    """Render top-level Macro Market Bar for India VIX, Brent Crude, and Nifty 50 (GIFT proxy)."""
+    data, error = api_client.get_macro_overview()
+    if not data or not data.get("indicators"):
+        return
+
+    indicators = data.get("indicators", [])
+    regime = data.get("market_regime", "Neutral")
+    regime_tone = data.get("regime_tone", "neutral")
+    synthetic = data.get("synthetic", False)
+
+    cards_html = []
+    for ind in indicators:
+        name = escape(str(ind.get("name", "")))
+        symbol = escape(str(ind.get("symbol", "")))
+        current = ind.get("current", 0.0)
+        chg = ind.get("change", 0.0)
+        pct = ind.get("change_pct", 0.0)
+        unit = escape(str(ind.get("unit", "")))
+        sentiment = escape(str(ind.get("sentiment", "")))
+
+        # Formatting price
+        if unit == "$":
+            price_str = f"${current:,.2f}"
+        elif current >= 1000:
+            price_str = f"{current:,.2f}"
+        else:
+            price_str = f"{current:.2f}"
+
+        arrow = "▲" if chg > 0 else ("▼" if chg < 0 else "•")
+        change_tone = "positive" if chg > 0 else ("negative" if chg < 0 else "neutral")
+        if "VIX" in name.upper():
+            change_tone = "negative" if chg > 0 else ("positive" if chg < 0 else "neutral")
+
+        chg_str = f"{arrow} {abs(pct):.2f}%"
+
+        card = (
+            f'<div class="macro-card">'
+            f'  <div class="macro-card-top"><span>{name}</span><span>{symbol}</span></div>'
+            f'  <div class="macro-card-main">'
+            f'    <span class="macro-card-price">{price_str}</span>'
+            f'    <span class="macro-card-change {change_tone}">{chg_str}</span>'
+            f'  </div>'
+            f'  <div class="macro-card-sub">{sentiment}</div>'
+            f'</div>'
+        )
+        cards_html.append(card)
+
+    cards_combined = "".join(cards_html)
+    syn_tag = ' <span class="terminal-tag" style="background:#fef3c7;border-color:#fde68a;color:#92400e;margin-left:8px;">SYNTHETIC DATA</span>' if synthetic else ''
+
+    html = (
+        f'<div class="macro-bar-container">'
+        f'  <div class="macro-bar-header">'
+        f'    <div class="macro-bar-title">'
+        f'      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">'
+        f'        <path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/>'
+        f'      </svg>'
+        f'      Market Pulse · Global &amp; Macro Regime{syn_tag}'
+        f'    </div>'
+        f'    <div class="macro-regime-pill {regime_tone}">'
+        f'      <span class="status-dot"></span>{escape(regime)}'
+        f'    </div>'
+        f'  </div>'
+        f'  <div class="macro-grid">{cards_combined}</div>'
+        f'</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
+
+
+@st.fragment(run_every=30)
+def macro_indicators_fragment() -> None:
+    """Periodically refresh macro pulse without triggering full page rerun."""
+    render_macro_bar()
+
+
 def main() -> None:
     apply_custom_css()
+    workspace = st.sidebar.radio("Workspace", ["Stock Screener", "Trade Ideas"], horizontal=True, key="workspace")
+    if workspace == "Trade Ideas":
+        from swing import render_swing
+        render_swing(api_client, render_terminal_header)
+        return
     with st.sidebar:
         st.markdown('<div class="sidebar-brand"><span class="status-dot"></span><strong>Filters &amp; screener rules</strong></div>', unsafe_allow_html=True)
         market = st.selectbox("Market universe", ["NSE", "NYSE"],
@@ -334,6 +415,7 @@ def main() -> None:
         st.markdown('<div class="sidebar-notice">ⓘ &nbsp; Yahoo Finance data is delayed and not real-time.'
                     '<br>NSE session calendar uses the XBOM proxy.</div>', unsafe_allow_html=True)
     live_status_and_countdown_fragment(market)
+    macro_indicators_fragment()
     results_fragment(market, search, rsi if refine else None, volume if refine else None,
                      pe if refine and limit_pe else None, partial_only, new_only)
 

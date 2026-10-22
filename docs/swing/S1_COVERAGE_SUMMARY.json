@@ -1,0 +1,100 @@
+{
+  "snapshot_id": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+  "observed_at": "2026-10-16T11:54:27.144029+00:00",
+  "imported_at": "2026-10-16T11:54:32.452472+00:00",
+  "universe_sha256": "2959bf206239284e145f7aecc65095b18d11556d2642323a70f2d26efe0f5cb3",
+  "membership_scope": "current_supplied_universe",
+  "last_completed_session": "2026-10-16",
+  "required_price_sessions": 400,
+  "required_delivery_sessions": 25,
+  "source_rows": 105744,
+  "accepted_prices": 94150,
+  "accepted_contexts": 10862,
+  "summary": {
+    "universe": 497,
+    "symbols_with_prices": 241,
+    "complete_trailing_price_histories": 0,
+    "complete_trailing_delivery_histories": 0,
+    "symbols_without_delivery": 3,
+    "swing_eligible": 0
+  },
+  "rejected": {
+    "CONTRADICTORY_DELIVERY_PERCENTAGE": 493,
+    "NON_SESSION": 239
+  },
+  "limitations": [
+    "Price adjustment and historical identity are unverified in public cache rows",
+    "Local import time is availability; historical session dates are not publication timestamps",
+    "Current constituent selection does not establish historical Nifty 500 membership",
+    "Source finality is unverified; calendar completion alone is not provider confirmation",
+    "No sector, surveillance, earnings or independent financial context imported in S1",
+    "No data here is promoted to trade eligibility"
+  ],
+  "benchmark": {
+    "ticker": "^CRSLDX",
+    "source_inventory": [
+      "NIFTY 50",
+      "NIFTY MIDCAP 150",
+      "NIFTY SMALLCAP 250"
+    ],
+    "rows": 0,
+    "open_rows": 0,
+    "status": "unavailable",
+    "missing_session_count": 400
+  },
+  "rejection_sessions": [
+    {
+      "code": "CONTRADICTORY_DELIVERY_PERCENTAGE",
+      "session": "2026-09-11",
+      "count": 493
+    },
+    {
+      "code": "NON_SESSION",
+      "session": "2025-10-21",
+      "count": 239
+    }
+  ],
+  "latest_price_distribution": [
+    {
+      "session": null,
+      "symbols": 256
+    },
+    {
+      "session": "2026-10-15",
+      "symbols": 152
+    },
+    {
+      "session": "2026-10-08",
+      "symbols": 27
+    },
+    {
+      "session": "2026-10-12",
+      "symbols": 18
+    },
+    {
+      "session": "2026-10-09",
+      "symbols": 39
+    },
+    {
+      "session": "2026-10-14",
+      "symbols": 5
+    }
+  ],
+  "missing_delivery": [
+    {
+      "ticker": "HFCL.NS",
+      "current_series": "BE"
+    },
+    {
+      "ticker": "MTARTECH.NS",
+      "current_series": "BE"
+    },
+    {
+      "ticker": "STLTECH.NS",
+      "current_series": "BE"
+    }
+  ],
+  "repeat_import_verified": true,
+  "sqlite_integrity": "ok",
+  "foreign_keys_valid": true
+}

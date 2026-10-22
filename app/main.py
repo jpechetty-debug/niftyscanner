@@ -33,6 +33,9 @@ def create_app(
     clock: Optional[Clock] = None,
     calendar: Optional[Union[MarketCalendar, Dict[str, MarketCalendar]]] = None,
     start_scheduler: bool = True,
+    operations_settings=None,
+    forward_settings=None,
+    macro_provider: Optional[Any] = None,
 ) -> FastAPI:
     """Create and configure FastAPI application instance with multi-market support."""
     cfg = config or load_settings()
@@ -158,10 +161,56 @@ def create_app(
     app.state.state_manager = state_manager
     app.state.scheduler = scheduler
     app.state.performance = performance
+    from app.swing.paper_service import PaperService
+    app.state.paper = PaperService(cfg, clk, calendars["NSE"]) if "NSE" in calendars else None
+    scheduler.paper = app.state.paper
+    from app.swing.operations import OperationsSettings, SwingOperations
+    from app.swing.validation_protocol import ValidationSettings
+    from app.swing.validation_store import ValidationRegistry
+    from app.swing.workspace import SwingWorkspace
+    validation_settings = ValidationSettings()
+    app.state.swing_workspace = None
+    app.state.forward = None
+    if "NSE" in calendars:
+        operations = SwingOperations(operations_settings or OperationsSettings(), cfg, clk, validation_settings.VALIDATION_DB_PATH)
+        app.state.paper.operations = operations
+        scheduler.swing_operations = operations
+        app.state.swing_workspace = SwingWorkspace(cfg, clk, calendars["NSE"], operations, ValidationRegistry(validation_settings, clk))
+        from app.swing.forward import ForwardService
+        app.state.forward = ForwardService(cfg, clk, calendars["NSE"], forward_settings, app.state.paper,
+            protected=(operations.settings.SWING_OPS_DB_PATH, validation_settings.VALIDATION_DB_PATH))
+
+    @app.get("/", include_in_schema=False)
+    async def root():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/docs")
 
     app.include_router(router)
     from app.performance.api import router as performance_router
     app.include_router(performance_router)
+    from app.swing.api import router as swing_router
+    app.include_router(swing_router)
+    from app.swing.paper_api import router as paper_router
+    app.include_router(paper_router)
+    from app.swing.workspace_api import router as workspace_router
+    app.include_router(workspace_router)
+    from app.swing.forward_api import router as forward_router
+    app.include_router(forward_router)
+
+    if macro_provider is not None:
+        app.state.macro_provider = macro_provider
+    elif cfg.MACRO_ENABLED:
+        from app.providers.fake_provider import FakeProvider
+        from app.macro.provider import FakeMacroProvider, LiveMacroProvider
+        if isinstance(provider, FakeProvider):
+            app.state.macro_provider = FakeMacroProvider(clock=clk)
+        else:
+            app.state.macro_provider = LiveMacroProvider(config=cfg, clock=clk)
+    else:
+        app.state.macro_provider = None
+
+    from app.macro.api import router as macro_router
+    app.include_router(macro_router)
     return app
 
 

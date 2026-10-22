@@ -1,0 +1,68 @@
+{
+  "observed_at": "2026-10-17T01:47:32.548896+00:00",
+  "vintage": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+  "before": {
+    "observation_sha256": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e",
+    "paper_exists": false,
+    "registry_exists": false
+  },
+  "after": {
+    "observation_sha256": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e",
+    "paper_exists": false,
+    "registry_exists": false
+  },
+  "stores_unchanged": true,
+  "source_audit_sha256": "54dfdb83a87ad6b812ede737999841a7bbee4d93437e1993cbe81cbeeddf40ef",
+  "authentication": "UNSIGNED",
+  "code_hashes": {
+    "app/swing/__init__.py": "0bb4460bf2b1854dcac30d7c21ba666a87f08172b5b02f6439b2107608fd7a07",
+    "app/swing/api.py": "060ef148f92f5dcc7653eb6f72509a7a08c3d99547c238a64e249782855f4735",
+    "app/swing/config.py": "ed99105b92fbb573089691ee92f5121d59d183f0a63de0c42f190fd7f4eeebfa",
+    "app/swing/data.py": "73171fa61c1dd4557ef1e2be62cd578f35e0e359dd721834688f28ca4379201c",
+    "app/swing/execution.py": "658bfabc0b1d12031c75a0a9949d98e679a70c0aee682cb329a1b6724a4059cf",
+    "app/swing/indicators.py": "a408865e19b642c25a253f8e16e7b755eb2e79e403cbf0a918c0dd579902e63b",
+    "app/swing/ledger.py": "1d7b32bcc9d77f3f714919891c36b713a5e3ef492a7b9bc15921402daacc3d2a",
+    "app/swing/models.py": "efef544bf740b5c2f8c6e44bdec3180f8c1649347025ff39fc70e6f1a0881fdf",
+    "app/swing/paper_api.py": "b166de96a1200217e5c03f386fd23a30eb0e91cdb181700a1abbe0093fc68112",
+    "app/swing/paper_service.py": "ca839cc5a60761837a56e84834fb6f23c680e16e33682c6cfdb5dfe9a6d0f8ad",
+    "app/swing/plans.py": "56ba1a68978fac093dc1473c13478e3a31e2f0399943dcd98e1eff5fd2c4cb92",
+    "app/swing/replay.py": "7ab2765a82826c87c319ee758f178738ab2a21aacf80bdc541ac4007fe12c52b",
+    "app/swing/repository.py": "6e96bbd03e179aacccbcee849219d35c881a4e39fbae04c1c1a43b04d165dc04",
+    "app/swing/risk.py": "b37a17f22a90bbbbad1c765d9f730394029873d44ac47e5ec7e607afe4d59089",
+    "app/swing/service.py": "0d362f511250828a7d10d432129ce4699a10a1b38aa47215ad703a934c48c7b5",
+    "app/swing/setups.py": "d0fe4e7af51d22a2ba248574526e39524e344b57d04fd8cee32f75ea8abc7b42",
+    "app/swing/validation.py": "357357916d3c264a3f52db933fd3cb1c626d252b6cf8bb8b2d6e9084515dae8d",
+    "app/swing/validation_protocol.py": "4e96af805ca170771a02ca6a54575fb28725275f03e5b0fec4199aab263a1bdb",
+    "app/swing/validation_stats.py": "6b7dd252fe2ec5810195feca532036445a8bd81e5b22ad9e9d722e5145627baf",
+    "app/swing/validation_store.py": "fcc0c1bd49d4412d948cf95a00375877204141f61420e01729feb0b8f9a2f6cc",
+    "app/swing/validation_stress.py": "2121a8f44d5d9aa0623a172ef8e3ff9a647973404a83620a2453c6b83d7aeb4b",
+    "app/core/config.py": "094f1bfe7b9366da23033e6360fc0532db32048f2cdeb16a1bce10c2a9ef397a",
+    "app/market/calendar.py": "e803cece95ad10f6c7488121ce38e4af1d33b7a36c81348eaca2e78fe43cb59b",
+    "app/providers/swing_archive.py": "24e305d7debe2c7e19ceac7f32aa516046aaae7bfff75eacab677f4dbb8d7d3f",
+    "scripts/swing_validate.py": "8a0bf39b90b08ab0ae681b08cd322edc41e24ce24c4430da6465c710822b9f64",
+    "docs/SWING_S4_CONTRACT.md": "aa736b04337545bc1e94e46303850c313dee0605cbc4807b116f6c7b897d8c40",
+    "requirements.txt": "1785a7722a466d08a06502dd2762259692040a63158fd64e1fe881e9e36b48de"
+  },
+  "runtime": {
+    "python": "3.12.10",
+    "sqlite": "3.49.1",
+    "numpy": "1.26.4",
+    "pydantic": "2.9.2",
+    "pandas": "2.2.3",
+    "exchange-calendars": "4.13.1"
+  },
+  "model_status": "RESEARCH_ONLY",
+  "failures": [
+    "point_in_time_universe_unverified",
+    "historical_publication_unverified",
+    "historical_adjustment_identity_unverified",
+    "historical_execution_context_unverified",
+    "nifty500_benchmark_unavailable",
+    "incomplete_price_histories"
+  ],
+  "real_study_registered": false,
+  "real_holdout_opened": false,
+  "real_account_created": false,
+  "real_fills_generated": 0,
+  "statistical_validation_performed": false
+}

@@ -1,0 +1,49 @@
+{
+  "payload": {
+    "vintage": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+    "verification": {
+      "snapshot_id": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+      "artifact_verified": true,
+      "universe_verified": true
+    },
+    "coverage_sha256": "6a0412bafec54d277e3332610887315d2aef635848b53d813555069c1c3c31ff",
+    "summary": {
+      "complete_trailing_delivery_histories": 0,
+      "complete_trailing_price_histories": 0,
+      "swing_eligible": 0,
+      "symbols_with_prices": 241,
+      "symbols_without_delivery": 3,
+      "universe": 497
+    },
+    "benchmark": {
+      "ticker": "^CRSLDX",
+      "status": "unavailable",
+      "rows": 0,
+      "open_rows": 0,
+      "missing_session_count": null
+    },
+    "membership_scope": "current_supplied_universe",
+    "failures": [
+      "point_in_time_universe_unverified",
+      "historical_publication_unverified",
+      "historical_adjustment_identity_unverified",
+      "historical_execution_context_unverified",
+      "nifty500_benchmark_unavailable",
+      "incomplete_price_histories"
+    ],
+    "limitations": [
+      "Price adjustment and historical identity are unverified in public cache rows",
+      "Local import time is availability; historical session dates are not publication timestamps",
+      "Current constituent selection does not establish historical Nifty 500 membership",
+      "Source finality is unverified; calendar completion alone is not provider confirmation",
+      "No sector, surveillance, earnings or independent financial context imported in S1",
+      "No data here is promoted to trade eligibility"
+    ],
+    "model_status": "RESEARCH_ONLY",
+    "notice": "S1 schema v1 cannot attest historical publication, membership, adjustment and execution context"
+  },
+  "sha256": "54dfdb83a87ad6b812ede737999841a7bbee4d93437e1993cbe81cbeeddf40ef",
+  "authentication": "UNSIGNED",
+  "key_id": null,
+  "signature": null
+}

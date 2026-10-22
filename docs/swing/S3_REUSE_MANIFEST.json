@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "purpose": "S3 read-only source review; native implementation, no credentials/dependencies copied",
+  "source_project": "D:\\Codex\\grclaudescript",
+  "files": [
+    {
+      "path": "core/swing_replay.py",
+      "sha256": "90b11fc43aa933d2159a3e9a1229a48e6aef6471defe7b7ce8de7082fcb74fdb",
+      "usage": "Replay/exit/cash-flow reference; existing NSE cost model retained"
+    },
+    {
+      "path": "core/backtest.py",
+      "sha256": "6ce7ddbc783d0a0e22c75aa34fbc62f7b4053214efb9e3d1877abe03857dc67e",
+      "usage": "Replay/exit/cash-flow reference; existing NSE cost model retained"
+    }
+  ]
+}

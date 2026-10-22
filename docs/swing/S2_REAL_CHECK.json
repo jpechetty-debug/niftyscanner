@@ -1,0 +1,30 @@
+{
+  "market": "NSE",
+  "vintage": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+  "decision_at": "2026-10-16 12:19:21.080580+00:00",
+  "data_session": "2026-10-16",
+  "model_status": "RESEARCH_ONLY",
+  "paper_eligible": false,
+  "missing_gates": [
+    "strategy_validation",
+    "benchmark:no_exact_vintage_prices",
+    "historical_identity_unverified",
+    "historical_publication_unverified"
+  ],
+  "funnel": {
+    "universe": 497,
+    "plans": 0,
+    "failed_symbols": 497,
+    "filtered_rules": 0
+  },
+  "evaluation_seconds": 0.524,
+  "store_sha256_before": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e",
+  "store_sha256_after": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e",
+  "store_bytes_unchanged": true,
+  "implementation_hash": "43e190f0e2fba30c291925dbafa414ad4f22c4876d4a11bc834c963637b14726",
+  "failed_reason_counts": {
+    "no_exact_vintage_prices": 256,
+    "benchmark_unavailable": 497,
+    "price_basis_unresolved_or_mismatched": 241
+  }
+}

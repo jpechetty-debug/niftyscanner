@@ -1,0 +1,44 @@
+{
+  "checked_at": "2026-10-16 15:16:45.291410+00:00",
+  "vintage": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+  "source_funnel": {
+    "universe": 497,
+    "plans": 0,
+    "failed_symbols": 497,
+    "filtered_rules": 0
+  },
+  "missing_gates": [
+    "strategy_validation",
+    "benchmark:no_exact_vintage_prices",
+    "historical_identity_unverified",
+    "historical_publication_unverified"
+  ],
+  "execution_probe": {
+    "ticker": "AARTIIND.NS",
+    "session": "2026-10-15",
+    "bar_available": false,
+    "reason": "price_basis_unresolved_or_mismatched",
+    "actions_verified": false,
+    "tradable": null,
+    "buy_capacity": null,
+    "sell_capacity": null
+  },
+  "replay_enabled_by_default": false,
+  "paper_db_existed_before": false,
+  "paper_db_exists_after": false,
+  "account_created": false,
+  "jobs_enqueued": 0,
+  "fills_created": 0,
+  "source_db_bytes_unchanged": true,
+  "seconds": 0.686,
+  "native_files_sha256": {
+    "ledger.py": "1d7b32bcc9d77f3f714919891c36b713a5e3ef492a7b9bc15921402daacc3d2a",
+    "execution.py": "658bfabc0b1d12031c75a0a9949d98e679a70c0aee682cb329a1b6724a4059cf",
+    "replay.py": "2a0899eea4c27d0b9838e6cb11e1748df64aea465c74515db9b713bbb2997412",
+    "paper_service.py": "ca839cc5a60761837a56e84834fb6f23c680e16e33682c6cfdb5dfe9a6d0f8ad",
+    "paper_api.py": "b166de96a1200217e5c03f386fd23a30eb0e91cdb181700a1abbe0093fc68112",
+    "risk.py": "b37a17f22a90bbbbad1c765d9f730394029873d44ac47e5ec7e607afe4d59089"
+  },
+  "execution_policy": "S3_RESEARCH_REPLAY_V1",
+  "final_recheck_at": "2026-10-16 15:19:32.929679+00:00"
+}

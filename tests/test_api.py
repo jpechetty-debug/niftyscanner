@@ -135,4 +135,12 @@ def test_settings_get_and_put(app_and_client):
     assert res_get2.json()["refresh_interval_sec"] == 120
 
 
+def test_root_redirect(app_and_client):
+    """Test / redirects to /docs."""
+    app, client, clock = app_and_client
+    res = client.get("/", follow_redirects=False)
+    assert res.status_code in (302, 307)
+    assert res.headers["location"] == "/docs"
+
+
 # Actual worker-thread responsiveness and shutdown are covered in test_repairs.py.

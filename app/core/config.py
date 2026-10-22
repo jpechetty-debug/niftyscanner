@@ -12,10 +12,11 @@ from pathlib import Path
 from typing import Any, List
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
+from app.swing.config import SwingSettings
 
 
-class Settings(BaseSettings):
+class Settings(SwingSettings):
     """Application settings loaded from environment, .env, and optional settings.json."""
 
     model_config = SettingsConfigDict(
@@ -97,6 +98,38 @@ class Settings(BaseSettings):
     WEIGHT_PE: float = Field(default=0.25, ge=0, allow_inf_nan=False)
     LOG_LEVEL: str = "INFO"
     SQLITE_BUSY_TIMEOUT_SEC: float = Field(default=30, gt=0, le=300, allow_inf_nan=False)
+
+    # Macro Indicators (India VIX, Brent Crude, Nifty 50 / GIFT Proxy)
+    MACRO_ENABLED: bool = True
+    MACRO_TICKER_NIFTY: str = "^NSEI"
+    MACRO_TICKER_VIX: str = "^INDIAVIX"
+    MACRO_TICKER_BRENT: str = "BZ=F"
+    MACRO_CACHE_TTL_SEC: int = Field(default=60, gt=0)
+    MACRO_VIX_LOW_THRESHOLD: float = Field(default=14.0, gt=0)
+    MACRO_VIX_HIGH_THRESHOLD: float = Field(default=20.0, gt=0)
+
+    # Swing S1: offline data foundation only; no trading or scheduled integration.
+    SWING_DB_PATH: str = "data/swing.db"
+    SWING_ARTIFACT_DIR: str = "data/swing"
+    SWING_SOURCE_DB_PATH: str = ""
+    SWING_MIN_HISTORY_SESSIONS: int = Field(default=400, ge=2, le=5000)
+    SWING_DELIVERY_SESSIONS: int = Field(default=25, ge=1, le=5000)
+    SWING_IMPORT_BATCH_SIZE: int = Field(default=2000, ge=1, le=50000)
+    SWING_SOURCE_TIMEOUT_SEC: float = Field(default=10, gt=0, le=120, allow_inf_nan=False)
+    SWING_BENCHMARK: str = "^CRSLDX"
+
+    @model_validator(mode="after")
+    def validate_swing_data(self) -> Settings:
+        for key in ("SWING_DB_PATH", "SWING_ARTIFACT_DIR", "SWING_BENCHMARK"):
+            if not getattr(self, key).strip():
+                raise ValueError(f"{key} cannot be empty")
+        if self.SWING_SOURCE_DB_PATH and Path(self.SWING_SOURCE_DB_PATH).resolve() == Path(self.SWING_DB_PATH).resolve():
+            raise ValueError("Swing source and destination must differ")
+        if Path(self.SWING_PAPER_DB_PATH).resolve() in {Path(self.SWING_DB_PATH).resolve(),
+                Path("data/history.db").resolve()} or (self.SWING_SOURCE_DB_PATH and
+                Path(self.SWING_PAPER_DB_PATH).resolve() == Path(self.SWING_SOURCE_DB_PATH).resolve()):
+            raise ValueError("Paper ledger must differ from observation, source and legacy databases")
+        return self
 
     # Forward signal evaluation (NSE price index; independent of live screening).
     PERFORMANCE_ENABLED: bool = True

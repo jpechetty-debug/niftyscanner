@@ -1,0 +1,76 @@
+{
+  "format": 1,
+  "purpose": "S1 source reuse references; no source code or credentials imported",
+  "sources": [
+    {
+      "project": "grclaudescript",
+      "root": "D:\\Codex\\grclaudescript",
+      "git_commit": null,
+      "files": [
+        {
+          "path": "core/swing.py",
+          "sha256": "79c525a9433297215664d120069acbeb07913cb35fa27cada5490e367997bf83"
+        },
+        {
+          "path": "core/alpha_portfolio.py",
+          "sha256": "fab4047aa0ad0c6ef3b37a4f6f70cb93a9efebec67b51d7878ba90a11bba783b"
+        },
+        {
+          "path": "core/swing_replay.py",
+          "sha256": "90b11fc43aa933d2159a3e9a1229a48e6aef6471defe7b7ce8de7082fcb74fdb"
+        },
+        {
+          "path": "core/backtest.py",
+          "sha256": "6ce7ddbc783d0a0e22c75aa34fbc62f7b4053214efb9e3d1877abe03857dc67e"
+        },
+        {
+          "path": "core/alpha_engine.py",
+          "sha256": "257bd1a2a1e181101f58cfeeca1f91ed7d6c9483bfa96e0f7403648b12e0cbc3"
+        },
+        {
+          "path": "core/regime.py",
+          "sha256": "02b1be19ffaec51803bd1d292035ed5c2b617b801a27d64714b07f8395393fc6"
+        },
+        {
+          "path": "core/alpha_feeds.py",
+          "sha256": "8ff0b43b347aa0eef227475fe3fd506892d2ecce0b00f244be29f5b5d47ae211"
+        }
+      ]
+    },
+    {
+      "project": "multibagger634-main",
+      "root": "D:\\Codex\\Finding Multibagger NSE\\multibagger634-main",
+      "git_commit": null,
+      "files": [
+        {
+          "path": "lite/delivery.py",
+          "sha256": "7afd40e90cb120c6fafa33a5dc591dd61c09fdce2330a5bbe0596853300e4af6"
+        },
+        {
+          "path": "lite/nse_archives.py",
+          "sha256": "42e808c6554cf55b2e4c61de9cdf7f738236d4eca2929ca1133bc4b56f521d32"
+        },
+        {
+          "path": "lite/fyers_data.py",
+          "sha256": "73aebca2c436bee57007dbeb47b6639499b6ff2882f48475ffd30a26c8679517"
+        },
+        {
+          "path": "lite/history.py",
+          "sha256": "9f81a2bb376002e721e4704edbe017012373d535e88770a00a374a59417cd97a"
+        },
+        {
+          "path": "lite/financial_reconciliation.py",
+          "sha256": "e557d80dfe7a9dea124decb9ae5118113d87b6c9dcebeaf1e7e93222a8aa1479"
+        },
+        {
+          "path": "lite/action_price_repair.py",
+          "sha256": "30f876b5be562e8cf4b79e833a4e579fa03d5ee378d68e20f9751556c63d3b29"
+        },
+        {
+          "path": "lite/db.py",
+          "sha256": "b8885cae51fdab83561a0f22902687b9d944cdfacd99263a1f5006a49ebae337"
+        }
+      ]
+    }
+  ]
+}

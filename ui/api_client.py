@@ -19,6 +19,37 @@ class ScreenerApiClient:
         self.base_url = (base_url or os.getenv("API_BASE_URL", "http://127.0.0.1:8000")).rstrip("/")
         self.timeout = timeout
 
+    def get_swing(self, path: str, **params):
+        """S5 reads use HTTP exclusively, including CSV and observation charts."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/swing/{path.lstrip('/')}",
+                                      params={k: v for k, v in params.items() if v is not None})
+            if response.status_code == 200:
+                return (response.text if path.endswith(".csv") else response.json()), None
+            messages = {404: "Research item unavailable or feature disabled.", 409: "Evidence or version check failed. Reload and review.",
+                        422: "Check the selected inputs.", 503: "Research store unavailable. Import real evidence first."}
+            return None, messages.get(response.status_code, f"Research service unavailable (HTTP {response.status_code}).")
+        except Exception:
+            return None, "Cannot reach the research API. Check the local service."
+
+    def post_swing(self, path: str, body: dict):
+        """Returns data/error/retry seconds; callers retain the same key after uncertainty."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(f"{self.base_url}/api/swing/{path.lstrip('/')}", json=body)
+            if response.status_code in {200, 202}:
+                return response.json(), None, None
+            if response.status_code >= 500:
+                return None, "Submission status unknown. Retry the same saved request key; do not create a new command.", None
+            retry = int(response.headers.get("Retry-After", "0")) or None
+            messages = {404: "Research mutations are disabled or the item is unavailable.",
+                        409: "State changed or work is paused. Reload and review before retrying.",
+                        422: "Check the account, dates, capital and required fields.", 429: "Shared worker busy; no control was applied."}
+            return None, messages.get(response.status_code, f"Research request failed (HTTP {response.status_code})."), retry
+        except Exception:
+            return None, "Submission status unknown. Retry the same saved request key; do not create a new command.", None
+
     def get_results(self, market: str = "NSE") -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetch latest screening results for a market."""
         url = f"{self.base_url}/api/results"
@@ -133,3 +164,15 @@ class ScreenerApiClient:
                 return None, f"Failed to export CSV: {res.text}"
         except Exception as e:
             return None, f"Error downloading CSV: {e}"
+
+    def get_macro_overview(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Fetch macro market indicators (India VIX, Brent Crude, Nifty 50) over HTTP."""
+        url = f"{self.base_url}/api/macro"
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                res = client.get(url)
+                if res.status_code == 200:
+                    return res.json(), None
+                return None, f"Macro API returned HTTP {res.status_code}"
+        except Exception as e:
+            return None, f"Cannot reach macro indicators: {e}"

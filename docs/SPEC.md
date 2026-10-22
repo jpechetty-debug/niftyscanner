@@ -532,3 +532,123 @@ User-authorized extension. Filters, scores and ranking are unchanged; nothing he
 - **Result fields:** `score_volume`, `score_rsi`, `score_pe` are the weighted section 12 contributions (`W_V*V`, `W_R*R`, `W_P*P`); they sum to `score`. Null in older snapshots. Included in results and export CSV.
 - **Endpoint:** `GET /api/performance/score-buckets?market=NSE&horizon=5` (horizon 1/5/10; same 422/404 market rules). Read-only: no sync, no price download. Per `PERFORMANCE_SCORE_EDGES` band: `low`, `high` (null = unbounded), `valid` (resolved outcomes), `hit_rate` (% with excess return > 0), `mean_excess`, `low_sample` (< `PERFORMANCE_MIN_SAMPLE`). Gross returns, current benchmark/basis/version only. NYSE returns `supported: false`.
 - **UI:** "Score mix" and "Past 5-day record" columns plus card detail. Labelled descriptive and not a forecast; low samples flagged; "No history" when a band has no resolved outcomes. Bands are cached in the UI for 300 s. HTTP-only.
+
+---
+
+# 26. SWING S1 — DATA AND PROVENANCE
+
+User-authorized first implementation phase of `docs/SWING_TRADING_PLAN.md`.
+
+- S1 adds explicit offline archive import, supplemental daily-history/context protocols, canonical observations, immutable content-addressed evidence and an isolated SQLite store. No swing setups, scoring, trades, alerts, UI changes, live-provider requests or scheduler hooks in S1.
+- Import only requested symbols from the supplied real NSE universe, plus the configured benchmark if present. Export bounded trailing price/delivery windows (400/25 expected sessions by default), retaining any future/uncompleted rows in those ranges as rejects. Source access is read-only/query-only under a consistent transaction. Export only allowlisted public price/delivery/benchmark columns; do not copy source credentials, account records or application schemas.
+- Freeze the selected source rows and schema/selection metadata into a hashed JSONL artifact. Preserve source file hashes/revisions in a separate reuse manifest. Canonical observations and rejects commit atomically with their snapshot. Reimporting identical selected content under the same calendar/universe policy is idempotent; changed vintages remain separate. Validate hashes on reuse and never overwrite an older vintage.
+- Cached prices without row-linked adjustment evidence retain `price_basis=unknown`, unknown historical identity/series and unverified publication. Do not inherit current constituent series/ISIN as historical facts. They can be inspected in coverage but cannot satisfy an explicit known-basis history request. Unknown basis does not become raw because a user selects raw in a query.
+- Delivery observations retain source, quantities and percentage. Validate reported percentage against quantity/volume within the declared reporting precision (0.01 percentage-point rounding); reject contradictory values. Preserve explicit missing BE coverage; never infer 100% delivery.
+- Required dates use exact exchange sessions. Reject malformed, future/uncompleted, non-session, invalid OHLC/volume/delivery and duplicate/conflicting symbol-session records. Zero equity volume is a non-trading data-quality rejection. Missing index OHLC/volume remain null rather than invented from close.
+- Timestamps are timezone-aware. Import availability is no earlier than local observation/ingestion; archival session dates are not publication dates. Generic dated context requires explicit timestamps/source, forbids future or naive publication/ingestion claims and supports unavailable/conflicting/stale states. Historical publication and constituent coverage remain unverified unless independently evidenced.
+- Providers require an explicit snapshot/vintage and as-of instant; they never stitch datasets or return observations not yet available. Reports show per-symbol exact trailing-session gaps, current identity/series expectations versus missing historical evidence, freshness, unresolved basis, benchmark close/open coverage and unavailable context. Nifty 50 is never substituted for missing Nifty 500.
+- Config defaults: `SWING_DB_PATH=data/swing.db`, `SWING_ARTIFACT_DIR=data/swing`, `SWING_SOURCE_DB_PATH=` (explicit input required), `SWING_MIN_HISTORY_SESSIONS=400`, `SWING_DELIVERY_SESSIONS=25`, `SWING_IMPORT_BATCH_SIZE=2000`, `SWING_SOURCE_TIMEOUT_SEC=10`, `SWING_BENCHMARK=^CRSLDX`. Paths/benchmark must be nonempty where required, bounds finite/positive; source and destination differ.
+- Source project data and running application remain untouched. Synthetic fixtures/tests stay isolated. CLI/report validation and a bounded real archive import establish S1 functionality, not historical data completeness or profitable swing signals.
+
+---
+
+# 27. SWING S2 — SETUPS AND RISK PLANS
+
+The user authorized S2 only. The frozen v1 definitions, inequalities, smoothing,
+cost algebra, exact-session entry convention and read-only API contract are in
+`docs/SWING_S2_CONTRACT.md`. All defaults/bounds are declared in the environment
+settings `app/swing/config.py` and `.env.example` before strategy implementation.
+This adds independent daily breakout/pullback research plans and a portfolio
+allocation preview library. S3 owns durable plans/reservations/orders/fills;
+S4 owns validation/promotion; S5 owns UI. Existing scanner behavior stays intact.
+
+---
+
+# 28. SWING S3 — REPLAY AND LIFECYCLE
+
+User-authorized S3 only. `docs/SWING_S3_CONTRACT.md` freezes the append-only
+research ledger, idempotent/versioned commands, conservative fill/action rules,
+shared-lock durable replay queue and HTTP contracts. No model promotion, broker
+orders or automatic capital deployment. Defaults: SWING_PAPER_DB_PATH=data/swing_paper.db,
+SWING_REPLAY_ENABLED=false, SWING_REPLAY_MAX_SESSIONS=250 (1..5000).
+S1/S2 data gates and legacy scanner behavior remain intact. S4–S6 stay pending.
+
+# 29. SWING S4 — INDEPENDENT VALIDATION
+
+User-authorized S4 only. `docs/SWING_S4_CONTRACT.md` specifies preregistered
+expanding folds, purging/embargo, future one-shot terminal holdout, clustered
+uncertainty, net portfolio/baseline metrics, adverse cost/parameter/execution
+stresses and fail-closed promotion recommendations. Separate append-only registry
+at `VALIDATION_DB_PATH=data/swing_validation.db`; optional dedicated
+`VALIDATION_SIGNING_KEY` authenticates manifests with HMAC-SHA256. Empty key means
+UNSIGNED and blocks promotion. `VALIDATION_GATES__*` defaults/bounds are declared
+in `app/swing/validation_protocol.py` and `.env.example`, then frozen per study.
+Explicit offline CLI only; no network, scheduler, UI or account funding changes.
+S3 uses identity execution-reference hooks by default; only isolated S4 replay
+overrides execution impact/capacity. Observed bars and production histories remain
+unchanged. Real source gaps prevent validation; no claims of profitable signals.
+S5/S6 remain pending and require separate authorization.
+
+# 30. SWING S5 — TRADE IDEAS AND OPERATIONS
+
+User-authorized S5 only. `docs/SWING_S5_CONTRACT.md` freezes the compact HTTP-only
+Trade Ideas/source/paper/validation/operations workspace, consistent snapshot CSV,
+inspection-only unknown-basis charts, hypothetical allocation and actual worker
+status. No synthetic live UI data, new strategy rules, provider downloads or
+automatic enabling of scans/outcomes/replay. Existing screener remains available.
+
+Separate `SWING_OPS_DB_PATH=data/swing_ops.db` stores revisioned pause/source controls,
+rollback receipts and a durable lifecycle outbox. Control mutations share the
+scan lock; busy returns 429/retry_after, stale revisions conflict. Pausing retains
+queued new work and liabilities. Explicit management-only replay creates no plans,
+reservations or entries, cancels known unfilled simulated orders and continues
+existing S3 exits/marks without freeing unknown liabilities. Global opt-in flags
+still apply. Rollback restores controls/source selection and forces pause; no
+financial ledger or strategy version is rewritten.
+
+`SWING_LIFECYCLE_WEBHOOK_URL=` is a separate opt-in destination; alerts default
+paused and never reuse the legacy scanner destination. Snapshot existing event
+heads when opting in. Durable claim-before-POST, stable Idempotency-Key and
+explicit uncertain-delivery review prevent automatic replay after timeout/restart.
+Bind each outbox item to its original destination; changing a URL never redirects
+old events. No capital/cash/quantities/account names in outbound payloads.
+Defaults: SWING_LIFECYCLE_TIMEOUT_SEC=5 (0..30], SWING_LIFECYCLE_BATCH_SIZE=20 (1..100),
+SWING_CHART_BARS=120 (20..500). All operational settings are environment-driven.
+No real outbound delivery is required for verification without user configuration.
+S6 remains pending and requires actual prospective sessions and authorization.
+
+# 31. SWING S6 — FORWARD PAPER RECONCILIATION
+
+User-authorized S6 tooling. `docs/SWING_S6_CONTRACT.md` freezes future campaign
+registration, immutable daily evidence, observed-reference/paper-fill checks and
+fail-closed operational monitoring. Explicit CLI only for writes; HTTP/UI reads
+never create records or start capture. Separate `SWING_FORWARD_DB_PATH=data/swing_forward.db`;
+`SWING_FORWARD_MIN_SESSIONS=30` (30..5000). No new timer, downloads, funding,
+automatic paper jobs, broker orders, historical backfill or model promotion.
+Capture actual sessions after replay and before the next open, including empty
+days. Missing sessions and unresolved/revised evidence remain visible. Thirty
+sessions alone never proves an edge; independent S4 gates still apply. The
+prospective observation window cannot be completed during implementation.
+
+---
+
+# 32. SOURCE-READINESS P0 — AUDIT AND REPAIR CONTRACT
+
+User-authorized P0 priority after the October graph review. This phase audits
+the existing imported swing coverage at the current completed-session cutoff
+and defines the replacement-source requirements in
+`docs/SWING_SOURCE_READINESS_P0.md` and `docs/SWING_SOURCE_BUNDLE_CONTRACT.md`.
+It does not implement a replacement adapter, import new observations, change
+calendar behavior, screening rules, scheduling, paper accounts or promotion.
+
+Preserve v1 unknown price basis and missing publication/identity/context proof.
+Exact missing-date counts use the current configured policy and must identify
+their as-of instant; a future calendar correction creates a new policy/vintage.
+The confirmed 2025-10-21 special-session discrepancy requires a separate sourced
+implementation. Read-only source access failures remain unavailable evidence;
+never bypass WAL state to manufacture a fresh upstream inventory.
+
+The bundle contract is an implementation proposal, not implemented API behavior.
+Before the next adapter phase, inspect representative real input files and freeze
+their publisher-column mappings. No source credentials, unrelated account tables,
+fabricated histories, benchmark substitution or weaker eligibility checks.

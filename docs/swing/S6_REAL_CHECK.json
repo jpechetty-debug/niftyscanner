@@ -1,0 +1,133 @@
+{
+  "observed_at": "2026-10-17T03:41:22.086756+00:00",
+  "before": {
+    "observations": {
+      "exists": true,
+      "sha256": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e"
+    },
+    "paper": {
+      "exists": false,
+      "sha256": null
+    },
+    "forward": {
+      "exists": false,
+      "sha256": null
+    },
+    "operations": {
+      "exists": false,
+      "sha256": null
+    },
+    "validation": {
+      "exists": false,
+      "sha256": null
+    }
+  },
+  "after": {
+    "observations": {
+      "exists": true,
+      "sha256": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e"
+    },
+    "paper": {
+      "exists": false,
+      "sha256": null
+    },
+    "forward": {
+      "exists": false,
+      "sha256": null
+    },
+    "operations": {
+      "exists": false,
+      "sha256": null
+    },
+    "validation": {
+      "exists": false,
+      "sha256": null
+    }
+  },
+  "stores_unchanged": true,
+  "campaigns": [],
+  "actual_forward_sessions": 0,
+  "model_status": "RESEARCH_ONLY",
+  "promotion_allowed": false,
+  "source_summary": {
+    "complete_trailing_delivery_histories": 0,
+    "complete_trailing_price_histories": 0,
+    "swing_eligible": 0,
+    "symbols_with_prices": 241,
+    "symbols_without_delivery": 3,
+    "universe": 497
+  },
+  "source_blockers": [
+    "point_in_time_universe_unverified",
+    "historical_publication_unverified",
+    "historical_adjustment_identity_unverified",
+    "historical_execution_context_unverified",
+    "nifty500_benchmark_unavailable",
+    "incomplete_price_histories"
+  ],
+  "real_account_creations": 0,
+  "real_fills": 0,
+  "real_outbound_deliveries": 0,
+  "preview_status": {
+    "controls": {
+      "revision": 0,
+      "paused": false,
+      "alerts_paused": true,
+      "selected_vintage": null,
+      "alerts_since": null
+    },
+    "history": [],
+    "scheduler_running": false,
+    "swing_enabled": true,
+    "replay_enabled": false,
+    "replay_worker_running": false,
+    "automatic_ideas_scheduled": false,
+    "outcomes_enabled": false,
+    "outcomes_worker_running": false,
+    "outcomes_time_ist": "21:00",
+    "webhook_configured": false,
+    "outbox": [],
+    "last_completed_session": "2026-10-16",
+    "read_only_preview": true
+  },
+  "unknown_campaign_http_status": 404,
+  "code_hashes": {
+    "app/swing/__init__.py": "0bb4460bf2b1854dcac30d7c21ba666a87f08172b5b02f6439b2107608fd7a07",
+    "app/swing/api.py": "060ef148f92f5dcc7653eb6f72509a7a08c3d99547c238a64e249782855f4735",
+    "app/swing/config.py": "ed99105b92fbb573089691ee92f5121d59d183f0a63de0c42f190fd7f4eeebfa",
+    "app/swing/data.py": "73171fa61c1dd4557ef1e2be62cd578f35e0e359dd721834688f28ca4379201c",
+    "app/swing/execution.py": "658bfabc0b1d12031c75a0a9949d98e679a70c0aee682cb329a1b6724a4059cf",
+    "app/swing/forward.py": "74260708d9c750c7100890c121b5fa59bdb38c29405a6c7bd1b90b50069087d5",
+    "app/swing/forward_api.py": "066dd063cc15878b83304ef3521b4a7abc3d2964d6c2b7efe9dfe9d7c92aeba1",
+    "app/swing/forward_store.py": "58cc3b80d73eeb35a96d9eb05e6e2b355401d05cda61643eebbb1712d4391574",
+    "app/swing/indicators.py": "a408865e19b642c25a253f8e16e7b755eb2e79e403cbf0a918c0dd579902e63b",
+    "app/swing/ledger.py": "9b5cf7f5cbba363cac7955ec2849c2fc3b63fede74cf872681f86e5bbdc9ced2",
+    "app/swing/models.py": "efef544bf740b5c2f8c6e44bdec3180f8c1649347025ff39fc70e6f1a0881fdf",
+    "app/swing/operations.py": "b2a3c522235e8f4d44d8105befdd61eb224753f12934e1d33696a8a7256a5f39",
+    "app/swing/paper_api.py": "4d1a9da3842643c947ea62aab5f5755b3029e729ba46a285088e3d5c843c909d",
+    "app/swing/paper_service.py": "108debd1e3c8b8f330f9772ff9565b26566e1dcd782d4ece2da11aa5649973e0",
+    "app/swing/plans.py": "56ba1a68978fac093dc1473c13478e3a31e2f0399943dcd98e1eff5fd2c4cb92",
+    "app/swing/replay.py": "7ed814b10ae8e15f8894bc5383cb711d7e063047595da04a792290e5fcd0e217",
+    "app/swing/repository.py": "6e96bbd03e179aacccbcee849219d35c881a4e39fbae04c1c1a43b04d165dc04",
+    "app/swing/risk.py": "b37a17f22a90bbbbad1c765d9f730394029873d44ac47e5ec7e607afe4d59089",
+    "app/swing/service.py": "0d362f511250828a7d10d432129ce4699a10a1b38aa47215ad703a934c48c7b5",
+    "app/swing/setups.py": "d0fe4e7af51d22a2ba248574526e39524e344b57d04fd8cee32f75ea8abc7b42",
+    "app/swing/validation.py": "357357916d3c264a3f52db933fd3cb1c626d252b6cf8bb8b2d6e9084515dae8d",
+    "app/swing/validation_protocol.py": "4e96af805ca170771a02ca6a54575fb28725275f03e5b0fec4199aab263a1bdb",
+    "app/swing/validation_stats.py": "6b7dd252fe2ec5810195feca532036445a8bd81e5b22ad9e9d722e5145627baf",
+    "app/swing/validation_store.py": "fcc0c1bd49d4412d948cf95a00375877204141f61420e01729feb0b8f9a2f6cc",
+    "app/swing/validation_stress.py": "2121a8f44d5d9aa0623a172ef8e3ff9a647973404a83620a2453c6b83d7aeb4b",
+    "app/swing/workspace.py": "54ddd8ecd3cbbc1d51afdd9d1e44674246894322a8ac1a3da0a5b4c28d25b7fb",
+    "app/swing/workspace_api.py": "3081c86b90a3d07aee317185862213cda2e42e8619fd8692bd975458a01c47b3",
+    "app/core/config.py": "094f1bfe7b9366da23033e6360fc0532db32048f2cdeb16a1bce10c2a9ef397a",
+    "app/market/calendar.py": "e803cece95ad10f6c7488121ce38e4af1d33b7a36c81348eaca2e78fe43cb59b",
+    "app/providers/swing_archive.py": "24e305d7debe2c7e19ceac7f32aa516046aaae7bfff75eacab677f4dbb8d7d3f",
+    "scripts/swing_validate.py": "8a0bf39b90b08ab0ae681b08cd322edc41e24ce24c4430da6465c710822b9f64",
+    "docs/SWING_S4_CONTRACT.md": "aa736b04337545bc1e94e46303850c313dee0605cbc4807b116f6c7b897d8c40",
+    "requirements.txt": "1785a7722a466d08a06502dd2762259692040a63158fd64e1fe881e9e36b48de",
+    "docs/SWING_S6_CONTRACT.md": "ac8e6d2a44ed63d2a0631992a739085a49be72115f3fe0ead5ef3292f63c4928",
+    "scripts/swing_forward.py": "7865b4cc1700e75d483900d5294642333bb3defb5a1dfc3bd57bddfa63be6dc6",
+    "ui/swing.py": "92411facd1bcff2a21930f8e5c8ec6f706346791799a0f84c4c0e571f260f7ae",
+    "app/main.py": "763dc0ad496ff10eb50cb7dcca56074e45eab755112b327b44ae76a369845d77"
+  }
+}

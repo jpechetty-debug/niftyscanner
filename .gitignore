@@ -28,11 +28,13 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# CodeGraph
+# Code intelligence & knowledge graphs
 .codegraph/
+graphify-out/
 
 data/history.db
 data/*.db
 data/*.db-*
 data/yfinance-cache/
+data/swing/
 scratch_*.py

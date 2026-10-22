@@ -287,6 +287,8 @@ class Scheduler:
                                 self._post_close_done[market] = local_date_str
 
             await self.evaluate_performance_if_idle()
+            await self.evaluate_swing_if_idle()
+            await self.deliver_swing_alerts_if_idle()
             # Sleep 15s or until manual trigger/stop
             try:
                 await asyncio.wait_for(self._trigger_event.wait(), timeout=15.0)
@@ -317,3 +319,38 @@ class Scheduler:
                 await asyncio.to_thread(self.performance.run_if_due)
             except Exception as error:
                 logger.exception(f"Outcome evaluation failed: {error}")
+
+    async def evaluate_swing_if_idle(self):
+        """Drain durable, explicitly submitted replay jobs under the global lock."""
+        paper = getattr(self, "paper", None)
+        if (not paper or not self.config.SWING_ENABLED or not self.config.SWING_REPLAY_ENABLED
+                or self._reserved_market or self.state.scan_lock.locked() or self._stopping):
+            return
+        try:
+            job = await asyncio.to_thread(paper.next_job)
+        except Exception as error:
+            logger.warning(f"Swing replay queue unavailable: {type(error).__name__}")
+            return
+        if not job or self._reserved_market or self.state.scan_lock.locked() or self._stopping:
+            return
+        async with self.state.scan_lock:
+            try:
+                await asyncio.to_thread(paper.process, job)
+            except Exception as error:
+                logger.warning(f"Swing replay worker failed: {type(error).__name__}")
+
+    async def deliver_swing_alerts_if_idle(self):
+        """Durable opt-in alerts use this scheduler and its shared scan reservation."""
+        ops = getattr(self, "swing_operations", None)
+        paper = getattr(self, "paper", None)
+        if (not ops or not paper or not self.config.SWING_ENABLED or not ops.webhook_configured
+                or self._reserved_market or self.state.scan_lock.locked() or self._stopping):
+            return
+        async with self.state.scan_lock:
+            if self._reserved_market or self._stopping:
+                return
+            try:
+                await asyncio.to_thread(ops.collect, paper.ledger)
+                await asyncio.to_thread(ops.dispatch)
+            except Exception as error:
+                logger.warning(f"Swing lifecycle delivery unavailable: {type(error).__name__}")

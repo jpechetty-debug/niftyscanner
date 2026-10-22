@@ -383,6 +383,7 @@ def test_streamlit_renders_real_countdown_without_network(monkeypatch):
     monkeypatch.setattr(client, "get_results", lambda *a, **k: ({
         "meta": {"market": "NSE", "stale": False, "funnel": {}},
         "results": [], "failed_symbols": []}, None))
+    monkeypatch.setattr(client, "get_macro_overview", lambda *a, **k: (None, None))
     page = AppTest.from_file("ui/app.py").run()
     assert not page.exception
     assert any("Next refresh in" in caption.value for caption in page.caption)

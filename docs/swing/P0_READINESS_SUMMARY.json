@@ -1,0 +1,296 @@
+{
+  "audit_observed_at": "2026-10-22T08:17:25.956013+00:00",
+  "phase": "P0_SOURCE_READINESS_AUDIT_ONLY",
+  "last_completed_session": "2026-10-21",
+  "market_open_at_audit": true,
+  "price_window": {
+    "start": "2025-03-05",
+    "end": "2026-10-21",
+    "sessions": 400
+  },
+  "delivery_window": {
+    "start": "2026-09-15",
+    "end": "2026-10-21",
+    "sessions": 25
+  },
+  "latest_vintage": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+  "latest_imported_at": "2026-10-16T11:54:32.452472+00:00",
+  "visible_real_vintages": 3,
+  "current_universe_matches_frozen": true,
+  "source_configured": false,
+  "configured_benchmark": "^CRSLDX",
+  "frozen_summary_at_import": {
+    "complete_trailing_delivery_histories": 0,
+    "complete_trailing_price_histories": 0,
+    "swing_eligible": 0,
+    "symbols_with_prices": 241,
+    "symbols_without_delivery": 3,
+    "universe": 497
+  },
+  "summary_at_audit": {
+    "universe": 497,
+    "symbols_with_prices": 241,
+    "complete_trailing_price_histories": 0,
+    "complete_trailing_delivery_histories": 0,
+    "symbols_with_cutoff_price": 0,
+    "missing_price_symbol_session_pairs": 105108,
+    "missing_delivery_symbol_session_pairs": 2056,
+    "swing_eligible": 0
+  },
+  "basis_counts": {
+    "unknown": 94150
+  },
+  "context_counts": {
+    "delivery": 10862
+  },
+  "rejected_at_import": [
+    {
+      "code": "CONTRADICTORY_DELIVERY_PERCENTAGE",
+      "session": "2026-09-11",
+      "rows": 493
+    },
+    {
+      "code": "NON_SESSION",
+      "session": "2025-10-21",
+      "rows": 239
+    }
+  ],
+  "latest_price_distribution": [
+    {
+      "session": null,
+      "symbols": 256
+    },
+    {
+      "session": "2026-10-08",
+      "symbols": 27
+    },
+    {
+      "session": "2026-10-09",
+      "symbols": 39
+    },
+    {
+      "session": "2026-10-12",
+      "symbols": 18
+    },
+    {
+      "session": "2026-10-14",
+      "symbols": 5
+    },
+    {
+      "session": "2026-10-15",
+      "symbols": 152
+    }
+  ],
+  "benchmark": {
+    "rows": 0,
+    "missing_session_count": 400
+  },
+  "source_inventory": {
+    "exists": true,
+    "scope": "Current supplied universe; consistent read-only public-table inventory",
+    "query_only": true,
+    "status": "unavailable_in_this_read_only_audit",
+    "error": "unable to open database file",
+    "note": "No immutable/nolock fallback: bypassing SQLite WAL state could report stale or inconsistent data",
+    "supported_tables": {}
+  },
+  "vintage_audits": [
+    {
+      "vintage": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+      "verification": {
+        "snapshot_id": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+        "artifact_verified": true,
+        "universe_verified": true
+      },
+      "coverage_sha256": "6a0412bafec54d277e3332610887315d2aef635848b53d813555069c1c3c31ff",
+      "summary": {
+        "complete_trailing_delivery_histories": 0,
+        "complete_trailing_price_histories": 0,
+        "swing_eligible": 0,
+        "symbols_with_prices": 241,
+        "symbols_without_delivery": 3,
+        "universe": 497
+      },
+      "benchmark": {
+        "ticker": "^CRSLDX",
+        "status": "unavailable",
+        "rows": 0,
+        "open_rows": 0,
+        "missing_session_count": null
+      },
+      "membership_scope": "current_supplied_universe",
+      "failures": [
+        "point_in_time_universe_unverified",
+        "historical_publication_unverified",
+        "historical_adjustment_identity_unverified",
+        "historical_execution_context_unverified",
+        "nifty500_benchmark_unavailable",
+        "incomplete_price_histories"
+      ],
+      "limitations": [
+        "Price adjustment and historical identity are unverified in public cache rows",
+        "Local import time is availability; historical session dates are not publication timestamps",
+        "Current constituent selection does not establish historical Nifty 500 membership",
+        "Source finality is unverified; calendar completion alone is not provider confirmation",
+        "No sector, surveillance, earnings or independent financial context imported in S1",
+        "No data here is promoted to trade eligibility"
+      ],
+      "model_status": "RESEARCH_ONLY",
+      "notice": "S1 schema v1 cannot attest historical publication, membership, adjustment and execution context"
+    },
+    {
+      "vintage": "66a8027a4f2f7d3e8e844e8e59371a2ea14c405ba0bb326b1eb0bf771abbcd4b",
+      "verification": {
+        "snapshot_id": "66a8027a4f2f7d3e8e844e8e59371a2ea14c405ba0bb326b1eb0bf771abbcd4b",
+        "artifact_verified": true,
+        "universe_verified": true
+      },
+      "coverage_sha256": "ab84c8e6b50f81c150f75029ad7f0cb8bd0bdaf6e03d0ff18ba2c40037e7f164",
+      "summary": {
+        "complete_trailing_delivery_histories": 0,
+        "complete_trailing_price_histories": 0,
+        "swing_eligible": 0,
+        "symbols_with_prices": 241,
+        "symbols_without_delivery": 3,
+        "universe": 497
+      },
+      "benchmark": {
+        "ticker": "^CRSLDX",
+        "status": "unavailable",
+        "rows": 0,
+        "open_rows": 0,
+        "missing_session_count": null
+      },
+      "membership_scope": "current_supplied_universe",
+      "failures": [
+        "point_in_time_universe_unverified",
+        "historical_publication_unverified",
+        "historical_adjustment_identity_unverified",
+        "historical_execution_context_unverified",
+        "nifty500_benchmark_unavailable",
+        "incomplete_price_histories"
+      ],
+      "limitations": [
+        "Price adjustment and historical identity are unverified in public cache rows",
+        "Local import time is availability; historical session dates are not publication timestamps",
+        "Current constituent selection does not establish historical Nifty 500 membership",
+        "Source finality is unverified; calendar completion alone is not provider confirmation",
+        "No sector, surveillance, earnings or independent financial context imported in S1",
+        "No data here is promoted to trade eligibility"
+      ],
+      "model_status": "RESEARCH_ONLY",
+      "notice": "S1 schema v1 cannot attest historical publication, membership, adjustment and execution context"
+    },
+    {
+      "vintage": "e880f247b017d4294dd30b8d530608220eb8c235647fd784e56f1c606c25ce24",
+      "verification": {
+        "snapshot_id": "e880f247b017d4294dd30b8d530608220eb8c235647fd784e56f1c606c25ce24",
+        "artifact_verified": true,
+        "universe_verified": true
+      },
+      "coverage_sha256": "9ab0e707cd217ee04b42cb9c24057f64f53695a955317398027dd1878ad7082d",
+      "summary": {
+        "complete_trailing_delivery_histories": 0,
+        "complete_trailing_price_histories": 0,
+        "swing_eligible": 0,
+        "symbols_with_prices": 241,
+        "symbols_without_delivery": 3,
+        "universe": 497
+      },
+      "benchmark": {
+        "ticker": "^CRSLDX",
+        "status": "unavailable",
+        "rows": 0,
+        "open_rows": 0,
+        "missing_session_count": null
+      },
+      "membership_scope": "current_supplied_universe",
+      "failures": [
+        "point_in_time_universe_unverified",
+        "historical_publication_unverified",
+        "historical_adjustment_identity_unverified",
+        "historical_execution_context_unverified",
+        "nifty500_benchmark_unavailable",
+        "incomplete_price_histories"
+      ],
+      "limitations": [
+        "Price adjustment and historical identity are unverified in public cache rows",
+        "Local import time is availability; historical session dates are not publication timestamps",
+        "Current constituent selection does not establish historical Nifty 500 membership",
+        "Source finality is unverified; calendar completion alone is not provider confirmation",
+        "No sector, surveillance, earnings or independent financial context imported in S1",
+        "No data here is promoted to trade eligibility"
+      ],
+      "model_status": "RESEARCH_ONLY",
+      "notice": "S1 schema v1 cannot attest historical publication, membership, adjustment and execution context"
+    }
+  ],
+  "special_session_review": {
+    "date": "2025-10-21",
+    "configured_calendar_has_session": false,
+    "official_reference": "https://nsearchives.nseindia.com/content/circulars/CMTR70319.pdf",
+    "policy_changed": false
+  },
+  "protected_files_before": {
+    "swing_store": {
+      "exists": true,
+      "sha256": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e"
+    },
+    "source_cache": {
+      "exists": true,
+      "sha256": "de54dae3500dab929b995aab3eca3f72dd1980394b5e6abdffe0fed86dd6910f"
+    },
+    "universe": {
+      "exists": true,
+      "sha256": "2959bf206239284e145f7aecc65095b18d11556d2642323a70f2d26efe0f5cb3"
+    },
+    "swing_paper_db_path": {
+      "exists": false,
+      "sha256": null
+    },
+    "legacy_history": {
+      "exists": true,
+      "sha256": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8"
+    }
+  },
+  "protected_files_after": {
+    "swing_store": {
+      "exists": true,
+      "sha256": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e"
+    },
+    "source_cache": {
+      "exists": true,
+      "sha256": "de54dae3500dab929b995aab3eca3f72dd1980394b5e6abdffe0fed86dd6910f"
+    },
+    "universe": {
+      "exists": true,
+      "sha256": "2959bf206239284e145f7aecc65095b18d11556d2642323a70f2d26efe0f5cb3"
+    },
+    "swing_paper_db_path": {
+      "exists": false,
+      "sha256": null
+    },
+    "legacy_history": {
+      "exists": true,
+      "sha256": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8"
+    }
+  },
+  "protected_files_unchanged": true,
+  "data_imported": false,
+  "data_repaired": false,
+  "model_status": "RESEARCH_ONLY",
+  "promotion_allowed": false,
+  "limitations": [
+    "Current coverage uses the configured proxy calendar; special-session differences require a new separately verified policy",
+    "Date presence is not row validity, publication, adjustment or historical membership evidence",
+    "Source inventory is not a new immutable import"
+  ],
+  "independent_verification": {
+    "independent_price_rows_in_window": 93692,
+    "independent_delivery_rows_in_window": 10369,
+    "price_and_delivery_missing_pair_totals_reconcile": true,
+    "quick_check": "ok",
+    "foreign_key_violations": 0,
+    "source_and_store_hashes_unchanged_during_audit": true
+  }
+}
