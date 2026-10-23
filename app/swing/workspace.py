@@ -2,6 +2,7 @@
 from collections import Counter
 from dataclasses import asdict
 from datetime import date, datetime
+from functools import wraps
 import csv
 import io
 import json
@@ -13,6 +14,7 @@ from app.swing.paper_service import PaperService
 from app.swing.repository import SwingRepository
 from app.swing.service import SwingResearchService, UnknownVintage
 from app.swing.setups import priority
+from app.swing.explanations import view_summary
 
 
 def filtered_plans(plans, strategy=None, sector=None, search="", names=None):
@@ -39,6 +41,15 @@ def plans_csv(plans, names=None):
         row = {k: "'"+v if isinstance(v, str) and v.lstrip().startswith(("=", "+", "-", "@")) else v for k, v in row.items()}
         writer.writerow(row)
     return output.getvalue()
+
+
+def _verified_request(operation):
+    """Keep verification reuse inside a single off-event-loop workspace read."""
+    @wraps(operation)
+    def read(self, *args, **kwargs):
+        with self.repository.verification_scope():
+            return operation(self, *args, **kwargs)
+    return read
 
 
 class SwingWorkspace:
@@ -73,24 +84,31 @@ class SwingWorkspace:
                            "source": "Local immutable archive", "verified_on_selection": False})
         return result
 
+    @_verified_request
     def ideas(self, vintage, strategy=None, sector=None, search=""):
         metadata, header = self.snapshot(vintage)
         names = self.names(metadata, header)
         if not self.config.SWING_ENABLED:
-            return {"market": "NSE", "vintage": vintage, "model_status": "RESEARCH_ONLY", "paper_eligible": False,
+            result = {"market": "NSE", "vintage": vintage, "model_status": "RESEARCH_ONLY", "paper_eligible": False,
                     "plans": [], "failed": [], "filtered": [], "funnel": {}, "missing_gates": ["swing_disabled"], "view_count": 0, "names": names}
+            result["rule_explanations"] = []
+            result["chart_contexts"] = []
+            result["view_summary"] = view_summary(result, 0, enabled=False)
+            return result
         result = self.research.results(vintage)
-        result["plans"] = filtered_plans(result["plans"], strategy, sector, search, names)
+        matching = filtered_plans(result["plans"], strategy, sector, search, names)
+        result["view_summary"] = view_summary(result, len(matching))
+        result["plans"] = matching
         result["names"] = names
         result["view_count"] = len(result["plans"])
         return result
 
-    @staticmethod
-    def names(metadata, header):
-        frozen_universe = Path(metadata["artifact_path"]).parent.parent / f"universe-{header['universe_sha256']}.csv"
-        with frozen_universe.open(encoding="utf-8-sig") as handle:
-            return {r["Symbol"].strip()+".NS": r["Company Name"].strip() for r in csv.DictReader(line for line in handle if not line.lstrip().startswith("#"))}
+    def names(self, metadata, header):
+        content = self.repository.universe_bytes(metadata["id"]).decode("utf-8-sig")
+        return {r["Symbol"].strip()+".NS": r["Company Name"].strip() for r in
+                csv.DictReader(line for line in io.StringIO(content) if not line.lstrip().startswith("#"))}
 
+    @_verified_request
     def view(self, vintage, strategy=None, sector=None, search=""):
         metadata, header = self.snapshot(vintage)
         result = self.ideas(vintage, strategy, sector, search)
@@ -134,6 +152,7 @@ class SwingWorkspace:
         with self.paper.ledger.connection() as conn:
             return [row[0] for row in conn.execute("SELECT id FROM accounts ORDER BY id") if "SYNTHETIC" not in row[0].upper()]
 
+    @_verified_request
     def allocation(self, vintage, account_id, strategy=None, sector=None, search=""):
         metadata, header = self.snapshot(vintage)
         if not self.config.SWING_ENABLED:

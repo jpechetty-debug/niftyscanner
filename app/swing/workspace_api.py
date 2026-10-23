@@ -42,6 +42,7 @@ class OperationsView(BaseModel):
     outbox: list[dict]
     last_completed_session: str
     read_only_preview: bool = False
+    worker_timings: dict = Field(default_factory=dict)
 
 
 class ChartView(BaseModel):
@@ -172,7 +173,23 @@ async def operations(request: Request, market: str = "NSE"):
     from app.providers.swing_archive import last_completed
     def describe():
         running = scheduler.is_running
+        from app.scheduler.metrics import queue_age_seconds
+        timings = scheduler.worker_timings.snapshot()
+        timings["lock_locked"] = scheduler.state.scan_lock.locked()
+        timings["lock_owner"] = next((r["worker"] for r in timings["workers"]
+                                      if r["state"] == "running"), None) if timings["lock_locked"] else None
+        try:
+            queue = service.paper.ledger.queue_summary()
+            queue["oldest_age_sec"] = queue_age_seconds(queue["oldest_queued_at"], service.clock.now())
+            queue["age_status"] = ("empty" if queue["pending"] == 0 else
+                                   "available" if queue["oldest_age_sec"] is not None else "timestamp_unavailable")
+        except Exception:
+            queue = {"status": "unavailable", "pending": None, "oldest_queued_at": None,
+                     "oldest_age_sec": None, "age_status": "unavailable"}
+        timings["replay_queue"] = queue
+        timings["lifecycle_queue_age_status"] = "enqueue_timestamp_not_recorded"
         return {"controls": service.operations.controls(), "history": service.operations.history(),
+            "worker_timings": timings,
             "scheduler_running": running, "swing_enabled": cfg.SWING_ENABLED,
             "replay_enabled": cfg.SWING_ENABLED and cfg.SWING_REPLAY_ENABLED,
             "replay_worker_running": running and cfg.SWING_ENABLED and cfg.SWING_REPLAY_ENABLED,

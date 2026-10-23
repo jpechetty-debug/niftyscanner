@@ -10,6 +10,7 @@ from streamlit.testing.v1 import AppTest
 
 from app.swing.setups import evaluate
 from app.swing.workspace import filtered_plans, plans_csv
+from app.swing.explanations import view_summary
 from tests.fixtures.swing_setups import setup_fixture
 from tests.fixtures.swing_ui import ui_payloads
 from ui.api_client import ScreenerApiClient
@@ -53,6 +54,30 @@ def test_unknown_or_mismatched_chart_basis_never_overlays_executable_levels():
     assert chart_figure({"observations": []}) is None
 
 
+def test_breakout_chart_renders_recorded_context_through_http_payloads(ui_mock, monkeypatch):
+    payloads, calls = ui_mock
+    plan = payloads["workspace"]["research"]["plans"][0]
+    payloads["chart"]["price_basis"] = plan["price_basis"]
+    monkeypatch.setattr(ScreenerApiClient, "post_swing", lambda *a, **k: pytest.fail("Chart inspection must not mutate"))
+    page = AppTest.from_string(HARNESS).run()
+    assert not page.exception
+    captions = " ".join(item.value for item in page.caption)
+    assert "Recorded resistance" in captions and "signal excluded" in captions
+    assert "Recorded volume baseline" in captions and "Close − resistance" in captions
+    assert "Close − fast EMA" in captions
+    assert any(path == "chart" and params["ticker"] == plan["ticker"] for path, params in calls)
+
+
+def test_older_breakout_response_shows_unavailable_chart_context(ui_mock):
+    payloads, _ = ui_mock
+    research = payloads["workspace"]["research"]
+    research.pop("chart_contexts")
+    payloads["chart"]["price_basis"] = research["plans"][0]["price_basis"]
+    page = AppTest.from_string(HARNESS).run()
+    assert not page.exception
+    assert any("Recorded breakout chart context unavailable" in item.value for item in page.caption)
+
+
 @pytest.fixture
 def ui_mock(monkeypatch):
     payloads = ui_payloads()
@@ -61,6 +86,7 @@ def ui_mock(monkeypatch):
         calls.append((path, params))
         data = deepcopy(payloads.get(path))
         if path == "workspace" and params.get("search"):
+            data["research"]["view_summary"] = view_summary(data["research"], 0)
             data["research"]["plans"] = []
         return data, None
     monkeypatch.setattr(ScreenerApiClient, "get_swing", read)
@@ -76,6 +102,35 @@ render_swing(ScreenerApiClient(), lambda market, connected: st.caption("SYNTHETI
 '''
 
 
+def test_worker_timing_displays_http_metrics_without_mutation(ui_mock, monkeypatch):
+    from app.market.clock import FakeClock
+    from app.scheduler.metrics import WorkerTimings
+    payloads, _ = ui_mock
+    metrics = WorkerTimings(FakeClock(), ["replay"]).snapshot()
+    metrics["workers"][0].update(busy_deferrals=3, attempts=1, max_duration_sec=7,
+        last={"queue_age_sec": 42., "queue_source": "durable_job", "lock_wait_sec": .5,
+              "duration_sec": 7., "phase": "replaying", "outcome": "completed"})
+    metrics["replay_queue"] = {"pending": 2, "oldest_age_sec": 65., "status": "available"}
+    payloads["operations"]["worker_timings"] = metrics
+    monkeypatch.setattr(ScreenerApiClient, "post_swing", lambda *a, **kw: pytest.fail("Read-only timing inspection"))
+    page = AppTest.from_string(HARNESS).run()
+    assert not page.exception
+    tables = [d.value for d in page.dataframe if "Worker" in d.value.columns]
+    assert len(tables) == 1
+    row = tables[0].iloc[0]
+    assert row["Queue age (s)"] == 42 and row["Lock wait (s)"] == .5
+    assert row["Task duration (s)"] == 7 and row["Busy deferrals"] == 3
+    assert any("Oldest queue age: 65" in c.value for c in page.caption)
+
+
+def test_worker_timing_supports_old_api_response(ui_mock):
+    payloads, _ = ui_mock
+    payloads["operations"].pop("worker_timings", None)
+    page = AppTest.from_string(HARNESS).run()
+    assert not page.exception
+    assert any("Worker timing unavailable in this response" in c.value for c in page.caption)
+
+
 def test_trade_ideas_filters_empty_state_and_disabled_funding(ui_mock):
     payloads, calls = ui_mock
     page = AppTest.from_string(HARNESS).run()
@@ -84,7 +139,8 @@ def test_trade_ideas_filters_empty_state_and_disabled_funding(ui_mock):
     assert page.text_input(key="swing_account_capital").value == ""
     page.text_input(key="swing_search").set_value("no match").run()
     assert not page.exception
-    assert any("No usable swing ideas yet" in m.value for m in page.markdown)
+    assert any("No ideas match these view filters" in m.value for m in page.markdown)
+    assert not any("Source evidence must pass" in m.value for m in page.markdown)
     assert any(path == "workspace" and params["search"] == "no match" for path, params in calls)
 
 
@@ -97,6 +153,36 @@ def test_source_chart_and_validation_empty_views(ui_mock):
     assert any("No real evaluation report" in x.value for x in page.info)
     assert any("Price basis: Unknown" in x.value for x in page.caption)
     assert any("No prospective campaign" in x.value for x in page.info)
+
+
+@pytest.mark.parametrize("failed,filtered,title", [
+    ([{"ticker": "TEST1.NS"}], [], "Data or evaluation unavailable"),
+    ([], [{"ticker": "TEST1.NS"}], "No matching daily setups"),
+    ([{"ticker": "TEST2.NS"}], [{"ticker": "TEST1.NS"}], "No setups among evaluated stocks"),
+])
+def test_empty_state_uses_backend_data_failure_or_rule_rejection(ui_mock, failed, filtered, title):
+    payloads, calls = ui_mock
+    research = payloads["workspace"]["research"]
+    research.update(plans=[], failed=failed, filtered=filtered)
+    research["view_summary"] = view_summary(research, 0)
+    research["rule_explanations"] = []
+    page = AppTest.from_string(HARNESS).run()
+    assert not page.exception
+    assert any(title in item.value for item in page.markdown)
+    assert any("Separate eligibility / validation" in item.value for item in page.caption)
+
+
+def test_rule_table_has_recorded_thresholds_and_no_mutation(ui_mock, monkeypatch):
+    payloads, calls = ui_mock
+    monkeypatch.setattr(ScreenerApiClient, "post_swing", lambda *a, **k: pytest.fail("Rule inspection must not mutate"))
+    page = AppTest.from_string(HARNESS).run()
+    assert not page.exception
+    frames = [frame.value for frame in page.dataframe if "Rule" in frame.value.columns]
+    assert len(frames) == 1
+    volume = frames[0].loc[frames[0]["Rule"] == "Signal relative volume"].iloc[0]
+    assert volume["Observed"] == "2.0000" and volume["Threshold"] == "1.5000"
+    assert volume["Outcome"] == "Pass" and volume["Operator"] == ">="
+    assert not any(path not in {"operations", "vintages", "workspace", "paper/accounts", "chart", "forward/campaigns", "validation/reports"} for path, _ in calls)
 
 
 def test_forward_monitor_displays_unresolved_sessions_without_mutating(ui_mock, monkeypatch):

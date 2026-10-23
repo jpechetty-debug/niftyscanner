@@ -652,3 +652,174 @@ The bundle contract is an implementation proposal, not implemented API behavior.
 Before the next adapter phase, inspect representative real input files and freeze
 their publisher-column mappings. No source credentials, unrelated account tables,
 fabricated histories, benchmark substitution or weaker eligibility checks.
+
+---
+
+# 33. SWING P1 — RULE EXPLANATIONS AND EMPTY STATES
+
+User-authorized P1 only. `docs/SWING_P1_CONTRACT.md` defines additive daily
+research rule evidence and backend view summaries. Preserve the existing S2
+inequalities, features, filters, ranking, costs and eligibility checks. Capture
+observed values, operators, thresholds and outcomes only for evaluated stages;
+missing/nonfinite evidence is unavailable, never fabricated. Data failures and
+normal rule rejections remain distinct, including in empty UI states.
+
+Explanations are read-response metadata outside immutable trade-plan/ledger
+schemas. Older responses without recorded explanations remain loadable and show
+unavailable details. No source import, calendar change, scan trigger, provider
+download, new configuration/dependency, financial mutation or later phase.
+
+---
+
+# 34. SWING P1 — REQUEST-SCOPED VERIFICATION REUSE
+
+User-authorized performance improvement only. Workspace view, ideas/export and
+allocation reads may reuse successful evidence verification through their nested
+synchronous calls. Keep receipts local to that repository and request, separated
+by vintage; discard them on both success and failure. Direct research/audit reads
+still verify independently. Never reuse a prior request's receipt or trust only
+file size/timestamps.
+
+Hash the snapshot, frozen universe and optional reuse manifest on first use and
+again before returning a successful scoped read. Company names consume the exact
+verified universe bytes. Missing/changed evidence or changed snapshot metadata
+fails closed. Preserve visibility, synthetic exclusion, response/export contents,
+immutable stores and the existing worker-thread HTTP execution. No strategy,
+provider, calendar, scheduler, eligibility, configuration or dependency changes.
+Implementation and measured evidence: `docs/SWING_VERIFICATION_REUSE.md`.
+
+---
+
+# 35. SWING P1 — RECORDED DAILY BREAKOUT CHART CONTEXT
+
+User-authorized chart improvement. `docs/SWING_CHART_CONTEXT_CONTRACT.md` defines
+additive research-response metadata bound to a breakout plan's identity, hashes,
+signal/decision, ticker, vintage and known basis. Capture evaluated resistance
+and exact prior window dates, volume baseline and ATR extension values/limits;
+both prior windows exclude the signal. Preserve immutable Plan/ledger schemas.
+
+UI charts render recorded metadata without recomputing indicators from displayed
+candles or current configuration. Show resistance/window, observed volume and
+frozen baseline, breakout ATR allowance and extension captions alongside existing
+entry/stop/target levels. Missing/malformed/old context is unavailable; mismatched
+chart/plan identities suppress overlays. Pullback and unknown-basis inspection
+remain separate. No strategy, cost, eligibility, source, calendar, configuration,
+dependency, worker or financial mutation. Historical records are not rewritten.
+
+---
+
+# 36. FOUR-HOUR BREAKOUT — INTERVAL-AWARE CACHE FOUNDATION
+
+User-authorized cache-first prerequisite for the optional four-hour integration.
+`docs/BREAKOUT_SHARED_INFRASTRUCTURE.md` reconciles shared infrastructure with the
+newer daily Trade Ideas implementation. Cache identity includes provider, ticker,
+interval and adjustment policy. Ticker-only calls retain the existing yfinance,
+daily, auto-adjusted namespace; the daily provider uses that key explicitly.
+
+Intraday histories must not inherit daily retention. Allow positive explicit row
+bounds; otherwise preserve supplied intraday history. Larger full downloads must
+survive merges into shorter caches. Intraday overlap checks use exact OHLCV and
+an optional explicit aware completed-bar-start watermark. Preserve legacy daily
+overlap semantics, retries, counters, breakers, rules and HTTP behavior.
+
+This phase adds no hourly fetching, aggregation, screening, API/UI, scheduler or
+validation record. Four-hour rules/cohorts remain separate from daily strategies.
+Complete-only session grouping remains the user's candle policy. B1–B6 remain
+separately CONTINUE-gated; their shared provider/chart/operations contracts are
+proposals until their respective implementations and release checks pass.
+
+---
+
+# 37. WORKER TIMING — MEASUREMENT BEFORE MORE BACKGROUND WORK
+
+User-authorized observational phase. `docs/WORKER_TIMING_CONTRACT.md` defines
+queue age, monotonic lock-acquisition wait and task runtime for the existing
+scan/outcome/replay/lifecycle workers. Preserve global serialization, scan
+priority, schedules, cooldowns, pause, durable identities and shutdown draining.
+Do not add background work, enable disabled workers or change scheduling policy.
+
+Keep bounded current/last samples, progress stages, outcome counts, maxima,
+busy deferrals and preflight failure counts per fixed worker in the Scheduler.
+Busy skips are not measurements of queued jobs or acquisition waits. Inject
+elapsed-time measurement for tests; use the injected Clock for aware timestamps.
+Accepted manual/startup/deadline metadata and durable replay created_at provide
+queue origins; invalid/missing/future timestamps remain unavailable. Task runtime
+covers existing work under the lock, including scan persistence/notifications.
+
+Operations HTTP/UI expose optional process-local metrics and read-only durable
+replay pending count/oldest age, including while workers are paused or stopped.
+Do not create a missing store to inspect it. Alert enqueue timestamps are not
+recorded, so their queue age is unavailable. New Scheduler instances reset timing
+samples; old HTTP responses remain loadable. No schema/config/dependency changes,
+financial mutations, load claims or synthetic production responses.
+
+---
+
+# 38. LOCAL SOURCE REUSE — INSPECTION DATA REFRESH
+
+User authorized reusing market data from Finding Multibagger NSE.
+`docs/SWING_LOCAL_SOURCE_CONTRACT.md` defines a bounded public-cache collection
+and existing S1 import, with original NSE Nifty 500 index CSV receipts. Read the
+source with normal SQLite read-only/query-only snapshot semantics. Copy only
+selected current-universe price/delivery columns and exact-index observations;
+preserve source hashes, document metadata, original CSV bytes and mapped values.
+Never copy accounts/credentials or run the source application.
+
+Provider-cache and original UDiFF equity collections must be separate vintages;
+never fill raw history gaps with adjusted cache rows. Raw collection selects the
+date-matched final NSE cash-market UDiFF product and retains other source
+products as explicit exclusions. Duplicate chosen-product revisions require
+review. Per-row invalid/ambiguous raw observations retain their rejection reason.
+
+Require exact Nifty 500 identity/session, matching blob hashes, available source
+ingestion and valid OHLC; conflicting index revisions fail for review. Preserve
+malformed/future cache rows for S1 rejection. Use a fresh staging directory and
+bookend source database/nonempty WAL hashes before publishing its manifest.
+Zero-byte WAL files contain no frames and are equivalent to absent WAL data.
+
+Append a separate S1 inspection vintage. Do not upgrade unknown cache adjustment
+basis, publication/identity evidence, calendar or eligibility. Preserve prior
+vintages and financial stores; independently reconcile counts, exact-session gaps
+and inspection HTTP reads. No downloads, worker/flag changes, source repair,
+account mutation, four-hour strategy or promotion. The evidence-backed adapter
+proposal remains a separate phase; coverage is not signal readiness.
+
+---
+
+# 39. NSE ARCHIVE DOCUMENT GAP FILLING
+
+User authorized NSE bhavcopy to fill missing data. The current phase permits
+explicit missing-document downloads and a new inspection import, extending the
+prior local-only collection scope. `docs/NSE_GAP_FILL_CONTRACT.md` freezes the
+workflow. Plan completed-session equity/index/delivery document gaps, deduplicate
+per date/product, use only the declared NSE archive URLs, and require an explicit
+request limit for fetch. Record status, actual observation time, original bytes
+and hashes; no hidden retries, redirects, automatic jobs or provider substitution.
+
+Apply to a fresh compatible raw NSE collection only. Verify supplied universe,
+benchmark and parent hashes; validate document/session/identity and receipt hashes;
+add only missing rows and reject unequal overlaps. Delivery is observed from its
+own report and never inferred. Preserve per-row and unavailable-document reasons.
+Publish a separate S1 vintage with existing validation and unchanged historical
+evidence, source files, calendar, basis/identity/publication gates and financial
+stores. No automatic enabling, strategy change, funding, alert or promotion.
+
+---
+
+# 40. LOCAL SWING RESEARCH AND REPLAY OPT-IN
+
+The user's follow-up about disabled Swing research and replay authorizes a local
+configuration opt-in after checking for existing accounts and queued replay work.
+Set `SWING_ENABLED=true` and `SWING_REPLAY_ENABLED=true` in the local `.env`;
+retain disabled code/example defaults and `SWING_MODE=research`. This explicit
+opt-in is separate from the archive gap-fill phase's prohibition on automatic
+enabling. Preserve source-basis, identity, publication, context, validation and
+execution gates. Configuration availability does not attest to signal readiness.
+
+Verify effective settings and real-data HTTP reads without starting servers or
+the scheduler, downloading data, submitting replay work, creating/funding an
+account, enabling alerts or promoting a model. Replay remains an explicitly
+submitted research queue under the existing global lock. Report configuration,
+worker-running status and data readiness separately. The local API must be
+started/restarted to load the updated flags. Record evidence and limitations in
+`docs/SWING_LOCAL_ENABLEMENT.md`.

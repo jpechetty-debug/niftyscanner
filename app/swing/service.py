@@ -8,6 +8,8 @@ from app.core.config import Settings
 from app.core.interfaces import Clock
 from app.swing.models import ContextRequest, HistoryRequest, utc
 from app.swing.plans import Evidence, priority
+from app.swing.explanations import RuleExplanation
+from app.swing.charts import breakout_chart_context
 from app.swing.repository import SwingRepository
 from app.swing.setups import evaluate, required_sessions
 
@@ -49,7 +51,7 @@ class SwingResearchService:
         start = trailing[0].date()
         request = HistoryRequest(cfg.SWING_BENCHMARK, start, end, now, vintage, "raw")
         benchmark = self.repository.history(request)
-        plans, failed, filtered = [], [], []
+        plans, failed, filtered, explanations, chart_contexts = [], [], [], [], []
         # Facts from S1 cannot become verified just because a client asks for raw.
         global_missing = ["strategy_validation"]
         if benchmark.status != "available":
@@ -67,6 +69,7 @@ class SwingResearchService:
                 reasons.append("benchmark_unavailable")
             if reasons:
                 failed.append({"ticker": ticker, "strategy": None, "category": "failed", "reasons": reasons})
+                explanations.append(RuleExplanation(ticker, vintage, now, end, "failed", reasons=tuple(reasons)))
                 continue
             contexts = {kind: self.repository.context(ContextRequest(ticker, kind, end, now, vintage))
                         for kind in ("sector", "earnings", "surveillance", "delivery")}
@@ -83,12 +86,17 @@ class SwingResearchService:
                                 surveillance_verified=verified("surveillance"), delivery_status=contexts["delivery"].status)
             result = evaluate(ticker, history.rows, benchmark.rows, evidence, cfg, self.calendar, now)
             plans.extend(result.plans)
+            chart_contexts.extend(context for plan in result.plans
+                                  if (context := breakout_chart_context(plan, history.rows, result.checks)) is not None)
+            outcome = "candidate" if result.plans else "failed" if any(r.category == "failed" for r in result.rejected) else "filtered"
+            explanations.append(RuleExplanation(ticker, vintage, now, end, outcome, result.checks,
+                tuple(dict.fromkeys(reason for rejection in result.rejected for reason in rejection.reasons))))
             for rejection in result.rejected:
                 (failed if rejection.category == "failed" else filtered).append(rejection)
         return {"market": "NSE", "vintage": vintage, "decision_at": now, "data_session": end,
                 "model_status": "RESEARCH_ONLY", "paper_eligible": False,
                 "missing_gates": global_missing, "plans": sorted(plans, key=priority),
-                "failed": failed, "filtered": filtered,
+                "failed": failed, "filtered": filtered, "rule_explanations": explanations, "chart_contexts": chart_contexts,
                 "funnel": {"universe": len(header["members"]), "plans": len(plans),
                            "failed_symbols": len({x.ticker if hasattr(x, "ticker") else x["ticker"] for x in failed}),
                            "filtered_rules": len(filtered)},

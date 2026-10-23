@@ -117,6 +117,9 @@ def test_scheduler_does_not_take_scan_slot_when_nothing_due():
         scan_lock = asyncio.Lock()
 
     sched = Scheduler.__new__(Scheduler)
+    from app.scheduler.metrics import WorkerTimings
+    from app.market.clock import FakeClock
+    sched.worker_timings = WorkerTimings(FakeClock(), ["outcomes"])
     sched.performance, sched.state, sched._reserved_market, sched.calendars = Perf(), State(), None, {}
     asyncio.run(sched.evaluate_performance_if_idle())
     assert not State.scan_lock.locked()
@@ -144,6 +147,9 @@ async def test_preflight_rechecks_scan_priority(interruption):
 
     loop, changed = asyncio.get_running_loop(), threading.Event()
     sched = Scheduler.__new__(Scheduler)
+    from app.scheduler.metrics import WorkerTimings
+    from app.market.clock import FakeClock
+    sched.worker_timings = WorkerTimings(FakeClock(), ["outcomes"])
     sched.state = SimpleNamespace(scan_lock=asyncio.Lock())
     sched._reserved_market, sched._stopping, sched.calendars = None, False, {}
 
@@ -172,6 +178,7 @@ async def test_preflight_rechecks_scan_priority(interruption):
     try:
         await asyncio.wait_for(sched.evaluate_performance_if_idle(), 1)
         assert calls == []
+        assert sched.worker_timings.snapshot()["workers"][0]["busy_deferrals"] == 1
     finally:
         if sched.state.scan_lock.locked():
             sched.state.scan_lock.release()

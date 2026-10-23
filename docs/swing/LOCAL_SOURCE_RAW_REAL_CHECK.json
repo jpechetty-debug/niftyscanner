@@ -1,0 +1,149 @@
+{
+  "observed_at": "2026-10-23T02:10:26.044730+00:00",
+  "phase": "LOCAL_SOURCE_INSPECTION_IMPORT",
+  "snapshot_id": "4d8e48f8d01212ae49f07eb7a5940b39f6d8bdc5aadbcd9d0505fc805065b6e4",
+  "source_uri": "file:///D:/Codex/Finding%20Multibagger%20NSE/multibagger634-main/lite.db",
+  "collection": "data\\swing\\local_sources\\20261023-raw-final",
+  "manifest_sha256": "03ebeee87fc267ec9ea0a4bd02af589ca9c8c342e77e61b1bfc784e00dfe4976",
+  "source_unchanged": true,
+  "index_reports": 399,
+  "index_first": "2025-03-06",
+  "index_last": "2026-10-19",
+  "old_vintages": [
+    "e880f247b017d4294dd30b8d530608220eb8c235647fd784e56f1c606c25ce24",
+    "66a8027a4f2f7d3e8e844e8e59371a2ea14c405ba0bb326b1eb0bf771abbcd4b",
+    "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+    "e33f2e7f95d69b2702d727661552606287c28e6c16ffb73dcedf4387b3a72283"
+  ],
+  "old_rows_before": {
+    "snapshots": {
+      "rows": 4,
+      "sha256": "5746d3db2ea3dd79e73a48fd7ed08382c4af56295fb849dbbb6dcf495713cad4"
+    },
+    "reports": {
+      "rows": 4,
+      "sha256": "55164298077255dc9755ec67fdf093a4d8dcceda90b357c91681f538254caf7a"
+    },
+    "prices": {
+      "rows": 377535,
+      "sha256": "ee99500c6b6441dbadc338df4b61f433ee76b171e72ecef8117c8b0b93f2c3ac"
+    },
+    "contexts": {
+      "rows": 44440,
+      "sha256": "408d1297be5a8b258978dbbd8567113a76a7703fb9316dfe8d5f290c17147240"
+    },
+    "rejects": {
+      "rows": 2436,
+      "sha256": "56b1a59d2f9e18255c9ec88367bc33137c884d676980fad745964455bfd28d1a"
+    }
+  },
+  "old_rows_after": {
+    "snapshots": {
+      "rows": 4,
+      "sha256": "5746d3db2ea3dd79e73a48fd7ed08382c4af56295fb849dbbb6dcf495713cad4"
+    },
+    "reports": {
+      "rows": 4,
+      "sha256": "55164298077255dc9755ec67fdf093a4d8dcceda90b357c91681f538254caf7a"
+    },
+    "prices": {
+      "rows": 377535,
+      "sha256": "ee99500c6b6441dbadc338df4b61f433ee76b171e72ecef8117c8b0b93f2c3ac"
+    },
+    "contexts": {
+      "rows": 44440,
+      "sha256": "408d1297be5a8b258978dbbd8567113a76a7703fb9316dfe8d5f290c17147240"
+    },
+    "rejects": {
+      "rows": 2436,
+      "sha256": "56b1a59d2f9e18255c9ec88367bc33137c884d676980fad745964455bfd28d1a"
+    }
+  },
+  "old_vintages_unchanged": true,
+  "protected_before": {
+    ".env": "ca4ad86a5346f6f8b589bc1e091cb726dcd5e89ce28c19dc93fe72bfb24c6408",
+    "data\\history.db": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8",
+    "data\\history.db-wal": null,
+    "data\\nifty500.csv": "2959bf206239284e145f7aecc65095b18d11556d2642323a70f2d26efe0f5cb3",
+    "data\\settings.json": "92c72f6febd2981f06d1445e7e6f24e447f2c101bef6eee03a44941da8d86e1e",
+    "data\\swing_forward.db": null,
+    "data\\swing_forward.db-wal": null,
+    "data\\swing_ops.db": null,
+    "data\\swing_ops.db-wal": null,
+    "data\\swing_paper.db": null,
+    "data\\swing_paper.db-wal": null,
+    "data\\swing_validation.db": null,
+    "data\\swing_validation.db-wal": null
+  },
+  "protected_after": {
+    ".env": "ca4ad86a5346f6f8b589bc1e091cb726dcd5e89ce28c19dc93fe72bfb24c6408",
+    "data\\history.db": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8",
+    "data\\history.db-wal": null,
+    "data\\nifty500.csv": "2959bf206239284e145f7aecc65095b18d11556d2642323a70f2d26efe0f5cb3",
+    "data\\settings.json": "92c72f6febd2981f06d1445e7e6f24e447f2c101bef6eee03a44941da8d86e1e",
+    "data\\swing_forward.db": null,
+    "data\\swing_forward.db-wal": null,
+    "data\\swing_ops.db": null,
+    "data\\swing_ops.db-wal": null,
+    "data\\swing_paper.db": null,
+    "data\\swing_paper.db-wal": null,
+    "data\\swing_validation.db": null,
+    "data\\swing_validation.db-wal": null
+  },
+  "protected_unchanged": true,
+  "last_completed_session": "2026-10-22",
+  "summary": {
+    "universe": 497,
+    "symbols_with_prices": 497,
+    "complete_trailing_price_histories": 0,
+    "complete_trailing_delivery_histories": 0,
+    "symbols_without_delivery": 2,
+    "swing_eligible": 0
+  },
+  "accepted_prices": 192168,
+  "accepted_contexts": 11854,
+  "rejected": {
+    "NON_SESSION": 477
+  },
+  "source_rows": 204499,
+  "benchmark": {
+    "ticker": "^CRSLDX",
+    "source_inventory": [],
+    "rows": 398,
+    "open_rows": 398,
+    "missing_sessions": [
+      "2026-10-21",
+      "2026-10-22"
+    ],
+    "status": "basis_unverified"
+  },
+  "missing_price_pairs": 7030,
+  "symbols_with_cutoff_price": 0,
+  "independent_counts": {
+    "prices": 192168,
+    "contexts": 11854,
+    "rejects": 477
+  },
+  "sqlite_quick_check": "ok",
+  "repeat_import_reused": true,
+  "api_check": {
+    "vintages_http": 200,
+    "workspace_http": 200,
+    "plans": 0,
+    "view_state": "disabled",
+    "scheduler_running": false
+  },
+  "flags": {
+    "SWING_ENABLED": false,
+    "SWING_REPLAY_ENABLED": false
+  },
+  "limitations": [
+    "Price adjustment and historical identity are unverified in public cache rows",
+    "Local import time is availability; historical session dates are not publication timestamps",
+    "Current constituent selection does not establish historical Nifty 500 membership",
+    "Source finality is unverified; calendar completion alone is not provider confirmation",
+    "No sector, surveillance, earnings or independent financial context imported in S1",
+    "No data here is promoted to trade eligibility"
+  ],
+  "original_index_identity": "Nifty 500 price index, not Nifty 50 or TRI"
+}

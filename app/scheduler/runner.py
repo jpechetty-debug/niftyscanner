@@ -13,6 +13,7 @@ from app.market.calendar import MarketCalendar
 from app.market.clock import SystemClock
 from app.services.scanner import StockScannerService
 from app.services.state import ScanStateManager
+from app.scheduler.metrics import WorkerTimings
 
 
 class Scheduler:
@@ -31,6 +32,7 @@ class Scheduler:
         clock: Optional[Clock] = None,
         performance_service=None,
         alerter=None,
+        timing_timer=None,
     ) -> None:
         self.config = config
         self.state = state_manager
@@ -72,6 +74,9 @@ class Scheduler:
         self._bg_tasks: set = set()
         self._reserved_market: Optional[str] = None
         self._stopping = False
+        workers = [f"scan:{m}" for m in config.enabled_markets_list]+["outcomes", "replay", "lifecycle_alerts"]
+        self.worker_timings = WorkerTimings(self.clock, workers, **({"timer": timing_timer} if timing_timer is not None else {}))
+        self._scan_requests: dict[str, tuple[datetime, str]] = {}
 
     async def start(self) -> None:
         """Start the background scheduler task."""
@@ -112,19 +117,24 @@ class Scheduler:
 
         lock = self.state.scan_lock
         if self._reserved_market is not None or lock.locked():
+            self.worker_timings.deferred(f"scan:{m}")
             return False
 
-        async with lock:
+        worker = f"scan:{m}"
+        queued_at, source = self._scan_requests.pop(m, (self.clock.now(), "invocation"))
+        async with self.worker_timings.measure_lock(worker, lock, queued_at=queued_at, queue_source=source) as timing:
             self.state.is_scanning[m] = True
             now = self.clock.now()
             self.state.last_scan_started_at[m] = now
 
             try:
+                self.worker_timings.progress(worker, "loading_universe")
                 constituents = await asyncio.to_thread(universe.load)
                 logger.info(
                     f"[{m}] Loaded {len(constituents)} constituents. Running scan in worker thread."
                 )
 
+                self.worker_timings.progress(worker, "scanning")
                 (
                     results,
                     funnel,
@@ -145,13 +155,16 @@ class Scheduler:
                         data_as_of=getattr(scanner, "data_as_of", ""),
                         persist=False,
                     )
+                    self.worker_timings.progress(worker, "persisting_scan")
                     await asyncio.to_thread(self.state.persist_last_scan, m)
                     if self.alerter is not None:
                         try:
+                            self.worker_timings.progress(worker, "legacy_notification")
                             await asyncio.to_thread(self.alerter.notify, m, results)
                         except Exception as error:  # alerts are best-effort, never a scan failure
                             logger.warning(f"[{m}] Alert dispatch failed: {error}")
                 else:
+                    timing.outcome = "failed"
                     self.state.update_scan_failure(
                         market=m,
                         failures=failures,
@@ -161,6 +174,7 @@ class Scheduler:
                 return is_success
 
             except Exception as e:
+                timing.outcome = "failed"
                 logger.exception(f"[{m}] Unhandled exception during scan execution: {e}")
                 self.state.update_scan_failure(
                     market=m,
@@ -198,6 +212,7 @@ class Scheduler:
         self._reserved_market = m
         self.state.is_scanning[m] = True
         self.state.last_scan_started_at[m] = self.clock.now()
+        self._scan_requests[m] = (self.state.last_scan_started_at[m], "manual_acceptance")
         task = asyncio.create_task(self._run_reserved_scan(m))
         self._bg_tasks.add(task)               # keep a ref so it isn't GC'd
         task.add_done_callback(self._bg_tasks.discard)
@@ -219,6 +234,10 @@ class Scheduler:
         """Main scheduler loop enforcing startup scans, market-hours gating, and post-close runs."""
         # 1. Mandatory scan at startup for all enabled markets
         logger.info(f"Executing startup scans for {self.config.enabled_markets_list}...")
+        startup_at = self.clock.now()
+        for market in self.config.enabled_markets_list:
+            if self.universes.get(market) and self._reserved_market != market:
+                self._scan_requests[market] = (startup_at, "startup")
         for market in self.config.enabled_markets_list:
             if self._stop_event.is_set():
                 return
@@ -254,6 +273,9 @@ class Scheduler:
                         last_completed is None
                         or (now - last_completed).total_seconds() >= eff_int
                     ):
+                        due = last_completed+timedelta(seconds=eff_int) if last_completed is not None else now
+                        if self._reserved_market != market:
+                            self._scan_requests[market] = (due, "scheduled_deadline")
                         await self.execute_scan(market)
                 else:
                     # Market closed: check post-close scan trigger
@@ -281,6 +303,8 @@ class Scheduler:
                                 f"[{market}] Triggering scheduled post-close scan "
                                 f"({self.config.MARKET_CLOSE_SCAN_DELAY_MIN}m after close)..."
                             )
+                            if self._reserved_market != market:
+                                self._scan_requests[market] = (retry_at, "scheduled_deadline")
                             ok = await self.execute_scan(market)
                             completed = self.state.last_scan_completed_at.get(market)
                             if ok and completed is not None and completed >= post_close_target:
@@ -298,8 +322,11 @@ class Scheduler:
 
     async def evaluate_performance_if_idle(self):
         """Scanning has priority; outcome downloads share the global provider lock."""
-        if (not self.performance or self._reserved_market or self.state.scan_lock.locked()
-                or getattr(self, "_stopping", False)):
+        if not self.performance or getattr(self, "_stopping", False):
+            return
+        if self._reserved_market or self.state.scan_lock.locked():
+            if self.config.PERFORMANCE_ENABLED:
+                self.worker_timings.deferred("outcomes")
             return
         if "NSE" in self.calendars and self.calendars["NSE"].is_market_open(self.clock.now()):
             return
@@ -309,48 +336,71 @@ class Scheduler:
                 if not await asyncio.to_thread(preflight):
                     return
             except Exception as error:
+                self.worker_timings.preflight_failed("outcomes")
                 logger.warning(f"Outcome due-check failed: {error}")
                 return
         # A manual reservation, active scan, or shutdown may arrive during preflight.
         if self._reserved_market or self.state.scan_lock.locked() or getattr(self, "_stopping", False):
+            self.worker_timings.deferred("outcomes")
             return
-        async with self.state.scan_lock:
+        async with self.worker_timings.measure_lock("outcomes", self.state.scan_lock) as timing:
             try:
-                await asyncio.to_thread(self.performance.run_if_due)
+                self.worker_timings.progress("outcomes", "evaluating_outcomes")
+                result = await asyncio.to_thread(self.performance.run_if_due)
+                if result is False:
+                    timing.outcome = "skipped"
             except Exception as error:
+                timing.outcome = "failed"
                 logger.exception(f"Outcome evaluation failed: {error}")
 
     async def evaluate_swing_if_idle(self):
         """Drain durable, explicitly submitted replay jobs under the global lock."""
         paper = getattr(self, "paper", None)
-        if (not paper or not self.config.SWING_ENABLED or not self.config.SWING_REPLAY_ENABLED
-                or self._reserved_market or self.state.scan_lock.locked() or self._stopping):
+        if not paper or not self.config.SWING_ENABLED or not self.config.SWING_REPLAY_ENABLED or self._stopping:
+            return
+        if self._reserved_market or self.state.scan_lock.locked():
+            self.worker_timings.deferred("replay")
             return
         try:
             job = await asyncio.to_thread(paper.next_job)
         except Exception as error:
+            self.worker_timings.preflight_failed("replay")
             logger.warning(f"Swing replay queue unavailable: {type(error).__name__}")
             return
-        if not job or self._reserved_market or self.state.scan_lock.locked() or self._stopping:
+        if not job:
             return
-        async with self.state.scan_lock:
+        if self._reserved_market or self.state.scan_lock.locked() or self._stopping:
+            self.worker_timings.deferred("replay")
+            return
+        async with self.worker_timings.measure_lock("replay", self.state.scan_lock,
+                queued_at=job.get("created_at"), queue_source="durable_job") as timing:
             try:
-                await asyncio.to_thread(paper.process, job)
+                self.worker_timings.progress("replay", "replaying")
+                result = await asyncio.to_thread(paper.process, job)
+                if isinstance(result, dict) and result.get("status") in {"FAILED", "PAUSED"}:
+                    timing.outcome = result["status"].lower()
             except Exception as error:
+                timing.outcome = "failed"
                 logger.warning(f"Swing replay worker failed: {type(error).__name__}")
 
     async def deliver_swing_alerts_if_idle(self):
         """Durable opt-in alerts use this scheduler and its shared scan reservation."""
         ops = getattr(self, "swing_operations", None)
         paper = getattr(self, "paper", None)
-        if (not ops or not paper or not self.config.SWING_ENABLED or not ops.webhook_configured
-                or self._reserved_market or self.state.scan_lock.locked() or self._stopping):
+        if not ops or not paper or not self.config.SWING_ENABLED or not ops.webhook_configured or self._stopping:
             return
-        async with self.state.scan_lock:
+        if self._reserved_market or self.state.scan_lock.locked():
+            self.worker_timings.deferred("lifecycle_alerts")
+            return
+        async with self.worker_timings.measure_lock("lifecycle_alerts", self.state.scan_lock) as timing:
             if self._reserved_market or self._stopping:
+                timing.outcome = "skipped"
                 return
             try:
+                self.worker_timings.progress("lifecycle_alerts", "collecting_events")
                 await asyncio.to_thread(ops.collect, paper.ledger)
+                self.worker_timings.progress("lifecycle_alerts", "dispatching_events")
                 await asyncio.to_thread(ops.dispatch)
             except Exception as error:
+                timing.outcome = "failed"
                 logger.warning(f"Swing lifecycle delivery unavailable: {type(error).__name__}")

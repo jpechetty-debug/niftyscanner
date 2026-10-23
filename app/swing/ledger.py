@@ -307,7 +307,19 @@ class PaperLedger:
         error = conn.execute("SELECT code FROM job_errors WHERE job_id=?", (job_id,)).fetchone()
         return {"id": job_id, "account_id": row["account_id"], "key": row["key"],
                 "request": json.loads(row["request"]), "status": "DONE" if result else "FAILED" if error else "QUEUED",
+                "created_at": row["created_at"],
                 "result": json.loads(result[0]) if result else None, "error": error[0] if error else None}
+
+    def queue_summary(self):
+        """Operational queue metadata only; no creation or account-state mutation."""
+        if not self.path.exists():
+            return {"status": "absent", "pending": 0, "management_only_pending": 0, "oldest_queued_at": None}
+        with self.connection() as conn:
+            row = conn.execute("""SELECT count(*) pending,min(j.created_at) oldest_queued_at,
+                coalesce(sum(CASE WHEN json_extract(j.request,'$.management_only')=1 THEN 1 ELSE 0 END),0) management_only_pending
+                FROM jobs j LEFT JOIN commands c ON c.account_id=j.account_id AND c.key=j.key
+                LEFT JOIN job_errors e ON e.job_id=j.id WHERE c.key IS NULL AND e.job_id IS NULL""").fetchone()
+            return {"status": "available", **dict(row)}
 
     def next_job(self, management_only=False):
         if not self.path.exists():

@@ -1,0 +1,119 @@
+{
+  "checked_at": "2026-10-23T03:08:54.211625+00:00",
+  "configuration": {
+    "SWING_ENABLED": true,
+    "SWING_REPLAY_ENABLED": true,
+    "SWING_MODE": "research",
+    "capital_configured": false
+  },
+  "http_status": {
+    "status": 200,
+    "vintages": 200,
+    "workspace": 200,
+    "data_quality": 200,
+    "paper_accounts": 200
+  },
+  "status": {
+    "enabled": true,
+    "mode": "research",
+    "model_status": "RESEARCH_ONLY",
+    "strategies": [
+      "DAILY_BREAKOUT_V1",
+      "DAILY_PULLBACK_V1"
+    ],
+    "capital_configured": false,
+    "scheduled": false,
+    "broker_execution": false,
+    "replay_enabled": true,
+    "replay_worker_running": false
+  },
+  "vintage": "98b3a73a42aec99d6a3d54536263221630b6a690510d93a0a799d185824c747a",
+  "vintages_visible": 6,
+  "research": {
+    "plan_count": 0,
+    "failed_count": 497,
+    "filtered_count": 0,
+    "failure_counts": {
+      "price_basis_unresolved_or_mismatched": 497,
+      "benchmark_unavailable": 497
+    },
+    "missing_gates": [
+      "strategy_validation",
+      "benchmark:price_basis_unresolved_or_mismatched",
+      "historical_identity_unverified",
+      "historical_publication_unverified"
+    ],
+    "view_summary": {
+      "state": "evaluation_unavailable",
+      "title": "Data or evaluation unavailable",
+      "message": "Recorded data or evaluation failures prevented research candidates.",
+      "next_action": "Review the failure reasons below and Source quality for missing evidence.",
+      "total_candidates": 0,
+      "view_candidates": 0,
+      "candidate_symbols": 0,
+      "failed_symbols": 497,
+      "filtered_symbols": 0
+    }
+  },
+  "coverage": {
+    "complete_trailing_delivery_histories": 493,
+    "complete_trailing_price_histories": 457,
+    "swing_eligible": 0,
+    "symbols_with_prices": 497,
+    "symbols_without_delivery": 2,
+    "universe": 497
+  },
+  "controls": {
+    "revision": 0,
+    "paused": false,
+    "alerts_paused": true,
+    "selected_vintage": null,
+    "alerts_since": null
+  },
+  "queue_before": {
+    "status": "absent",
+    "pending": 0,
+    "management_only_pending": 0,
+    "oldest_queued_at": null
+  },
+  "queue_after": {
+    "status": "absent",
+    "pending": 0,
+    "management_only_pending": 0,
+    "oldest_queued_at": null
+  },
+  "protected_before": {
+    "data\\swing.db": "8f1ccee717ce7665cee89ed2fe3d14cb9878be5b42fa253cee6aaa0f443aa96f",
+    "data\\swing_paper.db": null,
+    "data\\swing_ops.db": null,
+    "data\\swing_validation.db": null,
+    "data\\swing_forward.db": null,
+    "data\\history.db": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8",
+    "data\\swing.db-wal": null,
+    "data\\swing_paper.db-wal": null,
+    "data\\swing_ops.db-wal": null,
+    "data\\swing_validation.db-wal": null,
+    "data\\swing_forward.db-wal": null,
+    "data\\history.db-wal": null
+  },
+  "protected_after": {
+    "data\\swing.db": "8f1ccee717ce7665cee89ed2fe3d14cb9878be5b42fa253cee6aaa0f443aa96f",
+    "data\\swing_paper.db": null,
+    "data\\swing_ops.db": null,
+    "data\\swing_validation.db": null,
+    "data\\swing_forward.db": null,
+    "data\\history.db": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8",
+    "data\\swing.db-wal": null,
+    "data\\swing_paper.db-wal": null,
+    "data\\swing_ops.db-wal": null,
+    "data\\swing_validation.db-wal": null,
+    "data\\swing_forward.db-wal": null,
+    "data\\history.db-wal": null
+  },
+  "protected_unchanged": true,
+  "scheduler_running": false,
+  "real_replay_jobs_submitted": 0,
+  "real_accounts_created": 0,
+  "network_requests": 0,
+  "verification_transport": "in-process ASGI HTTP; no servers started"
+}

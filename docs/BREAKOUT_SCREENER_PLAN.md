@@ -1,16 +1,24 @@
 # Breakout Stock Screener integration plan
 
-Date: 5 October 2026. Status: planning complete; implementation has not started.
+Date: 5 October 2026; reconciled 22 October 2026. Status: interval-aware cache
+prerequisite implemented; four-hour fetching, rules, backend/UI and validation
+integration are not yet implemented.
 
 Source: the user's attached Indian-equities breakout prompt, reviewed against
 `docs/SPEC.md`, `AGENTS.md`, the installed dependencies and the indexed source.
 This is an addition to the existing screener. Each implementation phase below
 requires a separate `CONTINUE`; reread the master spec before each phase.
 
+The user's latest instruction puts hourly cache identity first. This is recorded
+as **B0, the shared-infrastructure prerequisite**, before the existing B1–B6
+gates. The newer daily Trade Ideas S1–S6 implementation is retained. See
+`docs/BREAKOUT_SHARED_INFRASTRUCTURE.md` for the current integration boundaries
+and `docs/BREAKOUT_CACHE_IMPLEMENTATION.md` for the cache implementation evidence.
+
 ## Intended experience and scope
 
-Add an NSE-only **Breakout** view alongside the existing screener and performance
-views. Scan the configured, user-supplied Nifty 500 universe and show up to 50
+Add an NSE-only **Breakout** view alongside the existing screener, performance
+and daily Trade Ideas views. Scan the configured, user-supplied Nifty 500 universe and show up to 50
 stocks satisfying all eight breakout rules. Display completed four-hour candles,
 their body-based consolidation zone, the evaluated breakout candle, scan duration
 and timestamps. Order results by relative volume descending, then ticker ascending
@@ -49,6 +57,11 @@ No new runtime dependency is expected. Plotly is already pinned in requirements.
 New libraries or a frontend replacement would require separate scope approval.
 
 ## Existing integration points verified from source
+
+The bullets below describe the original 5 October planning baseline. The
+22 October cache prerequisite adds BarCacheKey and updates the daily provider to
+use it explicitly. Its original ticker-only cache limitation is therefore fixed.
+Other four-hour functionality listed below remains pending.
 
 - `app/core/interfaces.py`: `MarketDataProvider` currently downloads daily bars
   and fetches P/E. `ScanResultItem` requires RSI, P/E and composite score.
@@ -190,7 +203,8 @@ and explicit offline CLI use, never exposed through the production API/UI.
 
 Cache keys must include provider, ticker, interval and adjustment policy. Keep
 hourly retention sufficient for the configured period/lookback; do not use the
-current 100-daily-row cap for hourly data. Validate overlapping completed bars
+daily 100-row policy for hourly data. B0 supplies these identities and retention
+controls; future adapters must use the same key on every operation. Validate overlapping completed bars
 and refetch the full affected history after adjustment inconsistencies.
 
 Use cheap price/volume checks before market-cap fetches. Share fundamental
@@ -282,12 +296,33 @@ output, assumptions, verified/unverified status, compliance and state summary.
 
 | Phase | Deliverables and expected files | Required acceptance |
 |---|---|---|
+| B0: Shared cache prerequisite (22 October user priority) | Immutable provider/ticker/interval/policy keys, explicit daily-provider keys, intraday retention and overlap checks; shared-infrastructure reconciliation | Isolated read/merge/invalidation, full-history retention, aware timestamp/completion handling, unchanged daily provider behavior; no hourly feature enabled |
 | B1: Freeze specification | Extend `docs/SPEC.md`; update this plan, `.env.example`, `app/core/config.py`; define breakout models/protocols in `app/breakout/` and compatible `app/core/interfaces.py` extensions | Confirm adaptations/as-of/high-distance/currency semantics; config/model validation; existing config and interface tests pass |
-| B2: Data and candle construction | `app/breakout/candles.py`, provider capability, interval-aware cache, market-cap cache, SYNTHETIC fixtures and provider/candle tests | Independently calculated OHLCV; no cross-session grouping; all completion/timezone/missing-bar/adjustment cases pass |
+| B2: Data and candle construction | `app/breakout/candles.py`, provider capability reusing B0 cache identities/retention, market-cap cache, SYNTHETIC fixtures and provider/candle tests | Independently calculated OHLCV; no cross-session grouping; all completion/timezone/missing-bar/adjustment cases pass |
 | B3: Eight-rule scanner | `app/breakout/indicators.py`, `filters.py`, `scanner.py`, strategy models, scanner tests | Exact inclusive/strict boundaries, all-eight AND behavior, as-of daily windows, deterministic ranking/top-50 and complete funnel accounting |
 | B4: Backend integration | Breakout routes/state/persistence; adapt `app/main.py`, scheduler and legacy state wiring; async/API/cache tests | Global single-flight, 202/422/404/429, responsive existing results endpoint, independent snapshots, rollback/restart/stale handling, immutable chart consistency |
 | B5: Streamlit view | `ui/breakout.py`, `ui/api_client.py`, `ui/app.py`, targeted UI tests | HTTP-only access, chart/range alignment, selection persistence, correct labels/empty/error/stale states and browser visual verification |
 | B6: Release verification | README operational notes, spec compliance audit, targeted regression fixes and recorded verification | Full network-free suite passes; approved bounded real-data probe verifies installed Yahoo hourly/currency semantics; no composite/NYSE/history regression |
+
+### 22 October shared-infrastructure mapping
+
+- Providers: preserve MarketDataProvider's daily contract; add a supplemental
+  intraday/market-cap capability in B1/B2 using the existing extraction, retries,
+  counters and breakers. A cache adjustment-policy label never upgrades S1's
+  unknown historical price basis or publication evidence.
+- Charts: extract reusable observed-candle/volume presentation primitives from
+  `ui/swing_charts.py` when B5 needs them. Four-hour annotations use timestamped
+  body-consolidation metadata, not daily resistance/ATR context or daily Plan.
+  Bind all results/annotations to an immutable strategy/scan/ticker/interval/basis.
+- Operations: reuse `app/swing/operations.py`'s controls surface and the existing
+  scheduler reservation/lock. Preserve the meaning of daily replay, selected
+  vintage and alert destinations; expose strategy-specific status/selection
+  before accepting any four-hour job. No second scheduler or automatic enabling.
+- Validation: keep `FOUR_HOUR_BREAKOUT_V1` separate from `DAILY_BREAKOUT_V1`,
+  `DAILY_PULLBACK_V1` and composite cohorts. Initial eight-rule results are
+  unvalidated research candidates, with no paper eligibility or promotion.
+  A separate registered entry/cost/outcome protocol is required before any
+  four-hour performance claim; daily S4/S6 records cannot supply that evidence.
 
 Suggested commands during implementation, not executed during planning:
 
@@ -324,7 +359,8 @@ completeness, reported market-cap currency/coverage, special-session completenes
 feature functionality or performance. No application tests or market-data scans
 were run because this deliverable is documentation only.
 
-First next step: on `CONTINUE`, reread `docs/SPEC.md` and complete **B1 only**,
+After the B0 cache prerequisite, first next step: on `CONTINUE`, reread
+`docs/SPEC.md` and complete **B1 only**,
 making the integration extension and proposed semantics explicit before data or
 scanning implementation. Resolve any remaining conflicting interpretation before
 changing application behavior.

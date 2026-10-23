@@ -6,12 +6,12 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
+
+from ui.swing_charts import chart_figure, chart_context_captions
 
 
 SETUPS = {"All setups": None, "Daily breakout": "DAILY_BREAKOUT_V1", "Trend pullback": "DAILY_PULLBACK_V1"}
-KNOWN_BASES = {"raw", "split_adjusted", "cash_dividend_adjusted", "total_return"}
 
 
 def number(value, decimals=2, prefix=""):
@@ -54,25 +54,6 @@ def idea_card(plan, name=""):
             f'<h3>{escape(str(plan.get("ticker", "")))}</h3><p>{escape(name)}</p></div><span class="swing-badge">Research only</span></div>'
             f'<div class="swing-plan-stats">{stats}</div><div class="swing-idea-foot">Signal {escape(display_time(plan.get("session")))}'
             f' · Entry expires {escape(display_time(plan.get("expiry_session")))} · {escape(label(plan.get("lifecycle")))} · Size requires a reconciled account</div></article>')
-
-
-def chart_figure(payload, plan=None):
-    rows = payload.get("observations", [])
-    if not rows:
-        return None
-    figure = go.Figure(go.Candlestick(x=[r["session"] for r in rows], open=[r.get("open") for r in rows],
-        high=[r.get("high") for r in rows], low=[r.get("low") for r in rows], close=[r.get("close") for r in rows],
-        increasing_line_color="#059669", decreasing_line_color="#64748b", name="Observed prices"))
-    if plan and payload.get("price_basis") in KNOWN_BASES and payload["price_basis"] == plan.get("price_basis") and payload["vintage"] == plan.get("evidence", {}).get("vintage"):
-        for key, color in (("stop", "#dc2626"), ("target", "#059669"), ("entry_min", "#4f46e5"), ("entry_max", "#4f46e5")):
-            if plan.get(key) is not None:
-                figure.add_shape(type="line", x0=plan["session"], x1=max(rows[-1]["session"], plan["expiry_session"]), y0=plan[key], y1=plan[key], line=dict(color=color, dash="dot"))
-    figure.update_layout(height=300, margin=dict(l=64, r=16, t=16, b=40), xaxis_rangeslider_visible=False,
-                         paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", font=dict(color="#334155", size=12),
-                         yaxis_title="Observed price (₹)", showlegend=False)
-    figure.update_xaxes(automargin=True)
-    figure.update_yaxes(automargin=True)
-    return figure
 
 
 def submit(client, path, body):
@@ -169,6 +150,51 @@ def source_view(client, view, vintage):
             st.caption(limitation)
 
 
+def rule_value(value):
+    """Format recorded operands only; the UI never recalculates rule outcomes."""
+    if value is None:
+        return "Unavailable"
+    if isinstance(value, (tuple, list)):
+        return "["+", ".join(rule_value(item) for item in value)+"]"
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, (int, float)):
+        return number(value, decimals=4)
+    return str(value)
+
+
+def rule_explanations_view(research, params):
+    """Display evidence for matching and rejected stocks from the selected HTTP view."""
+    explanations = research.get("rule_explanations", [])
+    if not explanations:
+        st.caption("Rule details unavailable for this response. Older saved plans are not reconstructed.")
+        return
+    explanations = [item for item in explanations if item.get("vintage") == params.get("vintage")]
+    if not explanations:
+        st.warning("Rule details do not match the selected source snapshot.")
+        return
+    with st.expander("Why stocks passed or were excluded"):
+        tickers = sorted({item["ticker"] for item in explanations})
+        selected = st.selectbox("Explain stock", tickers, key="swing_explanation_ticker")
+        item = next(item for item in explanations if item["ticker"] == selected)
+        st.caption(f"{label(item.get('outcome'))} · Decision {display_time(item.get('decision_at'), include_time=True)}"
+                   f" · Signal session {display_time(item.get('data_session'))}")
+        if item.get("reasons"):
+            st.write("Recorded outcomes: "+" · ".join(label(reason) for reason in item["reasons"]))
+        checks = [check for check in item.get("checks", [])
+                  if check.get("strategy") is None or params.get("strategy") is None or check["strategy"] == params["strategy"]]
+        if not checks:
+            st.info("No technical rule values were calculated for this stock, or the selected stage was not reached. Review the recorded reasons and Source quality.")
+            return
+        rows = [{"Scope": label(check["strategy"]) if check.get("strategy") else "Shared",
+                 "Rule": check["label"], "Observed": rule_value(check.get("observed")),
+                 "Operator": check["operator"], "Threshold": rule_value(check.get("threshold")),
+                 "Outcome": "Not evaluated" if check.get("passed") is None else "Pass" if check["passed"] else "Fail",
+                 "Units": check.get("units", ""), "Explanation": check.get("note", "")} for check in checks]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.caption("Values are rounded for display; outcomes use unrounded backend values. Array operands compare in the same order. Each setup is independent; later stages may not be reached.")
+
+
 def ideas_view(client, view, params, accounts):
     if not view:
         st.info("Import a real archive to inspect daily swing ideas.")
@@ -181,10 +207,12 @@ def ideas_view(client, view, params, accounts):
     tools[1].download_button("Export CSV", view.get("export_csv", ""), "swing-research.csv", "text/csv", key="swing_csv", on_click="ignore",
                              help="Exact server-generated snapshot shown here, including research status and missing gates.")
     if not plans:
-        st.markdown('<section class="swing-empty"><div class="swing-empty-icon">⌁</div><h3>No usable swing ideas yet</h3>'
-                    '<p>Source evidence must pass before a setup can support a trade plan. Review Source quality for the missing data.</p></section>', unsafe_allow_html=True)
-        if research.get("missing_gates"):
-            st.caption("Required: "+" · ".join(label(g) for g in research["missing_gates"]))
+        summary = research.get("view_summary", {})
+        title = summary.get("title", "No ideas in this view")
+        message = summary.get("message", "This response does not include a recorded reason for the empty view.")
+        action = summary.get("next_action", "Refresh the research view for explanation metadata.")
+        st.markdown('<section class="swing-empty"><div class="swing-empty-icon">⌁</div><h3>'+escape(title)+'</h3>'
+                    '<p>'+escape(message)+'</p><p>'+escape(action)+'</p></section>', unsafe_allow_html=True)
     else:
         for plan in plans:
             st.markdown(idea_card(plan, names.get(plan["ticker"], "")), unsafe_allow_html=True)
@@ -194,10 +222,20 @@ def ideas_view(client, view, params, accounts):
         st.caption(f"Decision {plan['decision_at']} · Price basis {label(plan['price_basis'])} · Sector {plan['evidence'].get('sector') or 'Unverified'}")
         chart, error = client.get_swing("chart", vintage=params["vintage"], ticker=plan["ticker"])
         if chart and chart.get("observations"):
-            st.plotly_chart(chart_figure(chart, plan), width="stretch", theme=None, key="idea_price_chart")
+            context = next((item for item in research.get("chart_contexts", []) if item.get("plan_id") == plan["id"]), None)
+            st.plotly_chart(chart_figure(chart, plan, context), width="stretch", theme=None, key="idea_price_chart")
+            for caption in chart_context_captions(chart, plan, context):
+                st.caption(caption)
         else:
             st.info(error or "Matching observed prices are unavailable.")
         st.caption("Missing gates: "+(" · ".join(label(g) for g in plan["missing_gates"]) or "None in this plan; strategy validation still required"))
+    summary = research.get("view_summary")
+    if summary:
+        st.caption(f"{summary['total_candidates']} candidate plans before view filters · "
+                   f"{summary['filtered_symbols']} stocks missed setup rules · {summary['failed_symbols']} stocks could not be evaluated")
+    if research.get("missing_gates"):
+        st.caption("Separate eligibility / validation requirements: "+" · ".join(label(g) for g in research["missing_gates"]))
+    rule_explanations_view(research, params)
     with st.expander("Allocation preview"):
         account = st.selectbox("Reconciled research account", accounts, index=None, placeholder="Choose an existing account", key="swing_allocation_account")
         if account and st.button("Calculate hypothetical size", key="swing_allocation"):
@@ -331,10 +369,42 @@ def validation_view(client):
             st.error(error)
 
 
+def worker_timing_view(ops):
+    """Display measured API values; unknown queue ages/durations stay unavailable."""
+    st.markdown("##### Worker timing")
+    metrics = ops.get("worker_timings")
+    if not metrics:
+        st.caption("Worker timing unavailable in this response.")
+        return
+    st.caption(f"Observed: {metrics.get('observed_at', 'Unavailable')} · Use Refresh research view to update this snapshot.")
+    rows = []
+    for worker in metrics.get("workers", []):
+        attempt = worker.get("active") or worker.get("last") or {}
+        rows.append({"Worker": worker["worker"], "State": worker["state"],
+            "Queue age (s)": attempt.get("queue_age_sec"), "Queue timestamp source": attempt.get("queue_source", "Unavailable"),
+            "Lock wait (s)": attempt.get("current_wait_sec") if worker["state"] == "waiting" else attempt.get("lock_wait_sec"),
+            "Task duration (s)": attempt.get("duration_sec"), "Max task duration (s)": worker.get("max_duration_sec"),
+            "Max lock wait (s)": worker.get("max_lock_wait_sec"), "Preflight failures": worker.get("preflight_failures", 0),
+            "Busy deferrals": worker["busy_deferrals"], "Attempts": worker["attempts"],
+            "Last outcome": (worker.get("last") or {}).get("outcome", "Unavailable"),
+            "Phase": attempt.get("phase", "Unavailable"), "Last progress": worker.get("last_progress_at")})
+    if rows:
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    queue = metrics.get("replay_queue", {})
+    st.caption(f"Pending replay jobs: {number(queue.get('pending'), decimals=0)} · "
+               f"Oldest queue age: {number(queue.get('oldest_age_sec'))} s · {label(queue.get('status'))}")
+    if queue.get("age_status") == "timestamp_unavailable":
+        st.caption("Replay queue timestamp is unavailable or invalid; its age is not assumed to be zero.")
+    st.caption("Queue age freezes at task start. Lock wait measures acquisition only; busy deferrals count skipped worker polls, not queued jobs. "
+               "Task duration includes the existing work under the lock. Timings reset with the scheduler process; "
+               "no sample means unavailable. Lifecycle queue age is unavailable because enqueue timestamps are not stored.")
+
+
 def operations_view(client, ops, vintage):
     st.markdown("#### Operations")
     control = ops["controls"]
     st.caption(f"Control revision {control['revision']} · Scheduler {'running' if ops['scheduler_running'] else 'stopped'} · Automatic idea generation is not scheduled")
+    worker_timing_view(ops)
     columns = st.columns(3)
     preview = ops.get("read_only_preview", False)
     if columns[0].button("Resume new work" if control["paused"] else "Pause new work", disabled=preview, width="stretch", key="swing_pause"):

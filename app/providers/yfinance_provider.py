@@ -18,7 +18,7 @@ import yfinance as yf
 from yfinance.exceptions import YFRateLimitError
 
 from app.cache.pe_cache import PECache
-from app.cache.bar_cache import BarCache
+from app.cache.bar_cache import BarCache, BarCacheKey
 from app.core.circuit_breaker import CircuitBreaker, CircuitState
 from app.core.config import Settings
 from app.core.fundamentals import NonPositiveEarnings, confirmed_nonpositive_earnings
@@ -139,13 +139,15 @@ class YFinanceProvider(MarketDataProvider):
         results: Dict[str, pd.DataFrame] = {}
         failures: List[FailedSymbolItem] = []
         count = 0
+        keys = {ticker: BarCacheKey(ticker, provider="yfinance", interval="1d", adjustment_policy="auto_adjust")
+                for ticker in tickers}
         chunks = [tickers[i:i + self.config.CHUNK_SIZE] for i in range(0, len(tickers), self.config.CHUNK_SIZE)]
         for idx, chunk in enumerate(chunks):
             if idx:
                 self.clock.sleep(random.uniform(self.config.CHUNK_DELAY_MIN_SEC, self.config.CHUNK_DELAY_MAX_SEC))
             groups = [
-                ([t for t in chunk if self.bar_cache.get_bars(t) is None], "6mo"),
-                ([t for t in chunk if self.bar_cache.get_bars(t) is not None], "5d"),
+                ([t for t in chunk if self.bar_cache.get_bars(keys[t]) is None], "6mo"),
+                ([t for t in chunk if self.bar_cache.get_bars(keys[t]) is not None], "5d"),
             ]
             for group, period in groups:
                 if not group:
@@ -163,8 +165,8 @@ class YFinanceProvider(MarketDataProvider):
                             failures.append(FailedSymbolItem(ticker=ticker, stage=Stage.DOWNLOAD,
                                 code=FailureCode.DELISTED, message="No data returned, possibly delisted or symbol mismatch"))
                             continue
-                        if period == "5d" and not self.bar_cache.is_consistent(ticker, bars):
-                            self.bar_cache.invalidate(ticker)
+                        if period == "5d" and not self.bar_cache.is_consistent(keys[ticker], bars):
+                            self.bar_cache.invalidate(keys[ticker])
                             full, attempts, refetch_code, refetch_message = self._download_group([ticker], "6mo")
                             count += attempts
                             if refetch_code is not None:
@@ -175,7 +177,7 @@ class YFinanceProvider(MarketDataProvider):
                                     break
                                 continue
                             bars = self._extract_ticker_df(full, ticker)
-                        results[ticker] = self.bar_cache.update_bars(ticker, bars)
+                        results[ticker] = self.bar_cache.update_bars(keys[ticker], bars)
                 if self.download_breaker.state == CircuitState.OPEN or code == FailureCode.CIRCUIT_OPEN:
                     remaining = max(0, len(tickers) - len(results) - sum(f.affected_count for f in failures))
                     failures.append(FailedSymbolItem(ticker="*", stage=Stage.DOWNLOAD,

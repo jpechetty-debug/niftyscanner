@@ -1,0 +1,150 @@
+{
+  "observed_at": "2026-10-22T16:27:24.846205+00:00",
+  "transport": "GET through httpx ASGITransport; no sockets/browser",
+  "read_only_preview": true,
+  "scheduler_running": false,
+  "replay_worker_running": false,
+  "outcomes_worker_running": false,
+  "worker_timings": {
+    "observed_at": "2026-10-22T16:27:24.846205+00:00",
+    "collection_started_at": "2026-10-22T16:27:24.769203+00:00",
+    "scope": "scheduler_instance",
+    "workers": [
+      {
+        "worker": "scan:NSE",
+        "state": "idle",
+        "attempts": 0,
+        "busy_deferrals": 0,
+        "preflight_failures": 0,
+        "last_deferred_at": null,
+        "last_progress_at": null,
+        "max_duration_sec": null,
+        "max_lock_wait_sec": null,
+        "outcomes": {
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "paused": 0
+        },
+        "active": null,
+        "last": null
+      },
+      {
+        "worker": "outcomes",
+        "state": "idle",
+        "attempts": 0,
+        "busy_deferrals": 0,
+        "preflight_failures": 0,
+        "last_deferred_at": null,
+        "last_progress_at": null,
+        "max_duration_sec": null,
+        "max_lock_wait_sec": null,
+        "outcomes": {
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "paused": 0
+        },
+        "active": null,
+        "last": null
+      },
+      {
+        "worker": "replay",
+        "state": "idle",
+        "attempts": 0,
+        "busy_deferrals": 0,
+        "preflight_failures": 0,
+        "last_deferred_at": null,
+        "last_progress_at": null,
+        "max_duration_sec": null,
+        "max_lock_wait_sec": null,
+        "outcomes": {
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "paused": 0
+        },
+        "active": null,
+        "last": null
+      },
+      {
+        "worker": "lifecycle_alerts",
+        "state": "idle",
+        "attempts": 0,
+        "busy_deferrals": 0,
+        "preflight_failures": 0,
+        "last_deferred_at": null,
+        "last_progress_at": null,
+        "max_duration_sec": null,
+        "max_lock_wait_sec": null,
+        "outcomes": {
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "paused": 0
+        },
+        "active": null,
+        "last": null
+      }
+    ],
+    "lock_locked": false,
+    "lock_owner": null,
+    "replay_queue": {
+      "status": "absent",
+      "pending": 0,
+      "management_only_pending": 0,
+      "oldest_queued_at": null,
+      "oldest_age_sec": null,
+      "age_status": "empty"
+    },
+    "lifecycle_queue_age_status": "enqueue_timestamp_not_recorded"
+  },
+  "protected_before": {
+    ".env": "ca4ad86a5346f6f8b589bc1e091cb726dcd5e89ce28c19dc93fe72bfb24c6408",
+    "data\\history.db": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8",
+    "data\\history.db-wal": null,
+    "data\\nifty500.csv": "2959bf206239284e145f7aecc65095b18d11556d2642323a70f2d26efe0f5cb3",
+    "data\\swing.db": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e",
+    "data\\swing.db-wal": null,
+    "data\\swing_forward.db": null,
+    "data\\swing_forward.db-wal": null,
+    "data\\swing_ops.db": null,
+    "data\\swing_ops.db-wal": null,
+    "data\\swing_paper.db": null,
+    "data\\swing_paper.db-wal": null,
+    "data\\swing_validation.db": null,
+    "data\\swing_validation.db-wal": null,
+    "data\\yfinance-cache\\cookies.db": "f576dc2653b6c0b61d7f9e1b29b3033398db2f00600f1d1697663169a5883c3b",
+    "data\\yfinance-cache\\cookies.db-wal": null,
+    "data\\yfinance-cache\\tkr-tz.db": "61d436aea7a5b9554eb61d1f12501081b0b08e8376130b9bcf7bb8d4306ef78c",
+    "data\\yfinance-cache\\tkr-tz.db-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "protected_after": {
+    ".env": "ca4ad86a5346f6f8b589bc1e091cb726dcd5e89ce28c19dc93fe72bfb24c6408",
+    "data\\history.db": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8",
+    "data\\history.db-wal": null,
+    "data\\nifty500.csv": "2959bf206239284e145f7aecc65095b18d11556d2642323a70f2d26efe0f5cb3",
+    "data\\swing.db": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e",
+    "data\\swing.db-wal": null,
+    "data\\swing_forward.db": null,
+    "data\\swing_forward.db-wal": null,
+    "data\\swing_ops.db": null,
+    "data\\swing_ops.db-wal": null,
+    "data\\swing_paper.db": null,
+    "data\\swing_paper.db-wal": null,
+    "data\\swing_validation.db": null,
+    "data\\swing_validation.db-wal": null,
+    "data\\yfinance-cache\\cookies.db": "f576dc2653b6c0b61d7f9e1b29b3033398db2f00600f1d1697663169a5883c3b",
+    "data\\yfinance-cache\\cookies.db-wal": null,
+    "data\\yfinance-cache\\tkr-tz.db": "61d436aea7a5b9554eb61d1f12501081b0b08e8376130b9bcf7bb8d4306ef78c",
+    "data\\yfinance-cache\\tkr-tz.db-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "protected_files_unchanged": true,
+  "provider_downloads": 0,
+  "worker_tasks_executed": 0,
+  "limitation": "Fresh idle process: no production task latency or contention measurement. Populated timings tested only with isolated synthetic workers."
+}

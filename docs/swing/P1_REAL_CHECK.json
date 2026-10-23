@@ -1,0 +1,87 @@
+{
+  "observed_at": "2026-10-22T09:24:57.205489+00:00",
+  "vintage": "54e87b147932a02732f6931adf6fb8067c9a4f2d2084126e816f1d94a97d10aa",
+  "universe": 497,
+  "plans": 0,
+  "explanations": 497,
+  "outcomes": {
+    "candidate": 0,
+    "filtered": 0,
+    "failed": 497
+  },
+  "unavailable_rules_not_fabricated": true,
+  "view_summary": {
+    "state": "evaluation_unavailable",
+    "title": "Data or evaluation unavailable",
+    "message": "Recorded data or evaluation failures prevented research candidates.",
+    "next_action": "Review the failure reasons below and Source quality for missing evidence.",
+    "total_candidates": 0,
+    "view_candidates": 0,
+    "candidate_symbols": 0,
+    "failed_symbols": 497,
+    "filtered_symbols": 0
+  },
+  "mutation_http_status": 403,
+  "scheduler_running": false,
+  "replay_worker_running": false,
+  "outcomes_worker_running": false,
+  "read_only_preview": true,
+  "protected_files_before": {
+    "observations": {
+      "exists": true,
+      "sha256": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e"
+    },
+    "paper": {
+      "exists": false,
+      "sha256": null
+    },
+    "operations": {
+      "exists": false,
+      "sha256": null
+    },
+    "validation": {
+      "exists": false,
+      "sha256": null
+    },
+    "forward": {
+      "exists": false,
+      "sha256": null
+    },
+    "legacy_history": {
+      "exists": true,
+      "sha256": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8"
+    }
+  },
+  "protected_files_after": {
+    "observations": {
+      "exists": true,
+      "sha256": "506fff77cb8127dba8a3e075da0417bd3d7b5b57a6f7f149494f109476d3d57e"
+    },
+    "paper": {
+      "exists": false,
+      "sha256": null
+    },
+    "operations": {
+      "exists": false,
+      "sha256": null
+    },
+    "validation": {
+      "exists": false,
+      "sha256": null
+    },
+    "forward": {
+      "exists": false,
+      "sha256": null
+    },
+    "legacy_history": {
+      "exists": true,
+      "sha256": "3bdac4859c961e448bf67eac24ea7b56c9976c0f0bb3d4b4738fb71d2d7acae8"
+    }
+  },
+  "protected_files_unchanged": true,
+  "real_account_creations": 0,
+  "real_scans": 0,
+  "real_provider_downloads": 0,
+  "model_status": "RESEARCH_ONLY",
+  "paper_eligible": false
+}

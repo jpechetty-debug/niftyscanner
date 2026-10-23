@@ -310,6 +310,52 @@ calendar discrepancy. The [proposed source-bundle contract](docs/SWING_SOURCE_BU
 defines the evidence needed for a future replacement importer. The audit does
 not repair data or enable swing execution.
 
+The [23 October local-source reuse](docs/SWING_LOCAL_SOURCE_REUSE.md) imported
+separate provider-cache and original NSE UDiFF inspection snapshots from Finding
+Multibagger NSE. The broader snapshot has prices for all 497 selected stocks and
+398 Nifty 500 OHLC observations, with source receipts and exact missing dates.
+Current session gaps and unverified S1 basis/context still block signal readiness;
+the import does not enable workers or change eligibility rules.
+
+The subsequent [NSE gap fill](docs/NSE_GAP_FILL_IMPLEMENTATION.md) acquired four
+missing official reports and added 497 stock, two Nifty 500 and 495 delivery
+observations. As of 22 October, 457 selected stocks have complete 400-session
+histories and the benchmark has 400/400 OHLC observations. The manual
+`scripts.swing_fill_gaps` CLI plans, fetches and applies missing documents to a
+new inspection vintage; it adds no automatic job. Older gaps and S1 evidence
+limitations remain explicit, and signal eligibility is unchanged.
+
+Trade Ideas now explains whether an empty view comes from technical rules,
+unavailable data/evaluation, or view filters. Its expandable stock inspector shows
+backend-recorded observations, thresholds and outcomes, with unavailable data
+labelled explicitly. Existing strategy rules and stored trade plans are unchanged.
+See [P1 implementation and verification](docs/SWING_P1_IMPLEMENTATION.md).
+
+Workspace reads now reuse evidence verification within the request, with a full
+closing hash check and fresh checks on each subsequent request. The real-archive
+probe reduced four full hash passes to two while preserving the response and CSV.
+See [verification reuse and tamper tests](docs/SWING_VERIFICATION_REUSE.md).
+
+Daily breakout detail charts now show the recorded resistance window and level,
+signal-session ATR allowance, and observed volume against the frozen prior-session
+baseline. Captions distinguish breakout extension from fast-EMA extension. These
+overlays require matching plan/chart evidence; older responses show unavailable
+context. See [chart context and verification](docs/SWING_CHART_CONTEXT_IMPLEMENTATION.md).
+
+The four-hour Breakout integration now has an interval-aware cache prerequisite:
+provider/ticker/interval/adjustment-policy histories are isolated, and hourly
+retention no longer inherits the daily row policy. Existing daily calls retain
+their namespace. The four-hour strategy itself is not yet available; the
+[shared-infrastructure contract](docs/BREAKOUT_SHARED_INFRASTRUCTURE.md) and
+[cache verification](docs/BREAKOUT_CACHE_IMPLEMENTATION.md) define the next gates.
+
+Trade Ideas → Operations now shows queue age, lock acquisition wait, task duration,
+progress stage and busy deferrals for the existing workers. Replay pending count
+and oldest age come from the durable queue, even when workers are stopped. Timing
+samples reset with the scheduler process; unavailable timestamps stay unavailable.
+Use Refresh research view for an updated snapshot. Scheduling and worker enabling are
+unchanged. See [worker timing and verification](docs/WORKER_TIMING_IMPLEMENTATION.md).
+
 For detailed blueprints on production containerization, Redis state migration, Celery/worker horizontal scaling, and legal considerations, see:
 - [`docs/PRODUCTION.md`](docs/PRODUCTION.md)
 - [`docs/SPEC.md`](docs/SPEC.md)

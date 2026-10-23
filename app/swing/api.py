@@ -5,9 +5,11 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.swing.plans import Plan, Rejection
+from app.swing.explanations import RuleExplanation
+from app.swing.charts import BreakoutChartContext
 from app.swing.repository import SwingRepository
 from app.swing.service import SwingResearchService, UnknownVintage
 
@@ -26,6 +28,8 @@ class ResearchResponse(BaseModel):
     filtered: list[Rejection]
     funnel: dict[str, int]
     missing_gates: list[str]
+    rule_explanations: list[RuleExplanation] = Field(default_factory=list)
+    chart_contexts: list[BreakoutChartContext] = Field(default_factory=list)
 
 
 class StatusResponse(BaseModel):

@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from datetime import date, datetime
 from app.swing.models import utc
+from app.swing.explanations import RuleCheck
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,7 @@ class Rejection:
 class Evaluation:
     plans: tuple[Plan, ...] = ()
     rejected: tuple[Rejection, ...] = ()
+    checks: tuple[RuleCheck, ...] = ()
 
 
 def priority(plan: Plan):

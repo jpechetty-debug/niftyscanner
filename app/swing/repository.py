@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import hashlib
 import json
 import sqlite3
 
@@ -27,10 +30,18 @@ DDL = (
 )
 
 
+@dataclass(frozen=True)
+class _VerifiedEvidence:
+    metadata: tuple[tuple[str, str], ...]
+    universe: bytes
+
+
 class SwingRepository:
     def __init__(self, path: Path, timeout: float = 30, calendar=None):
         self.path, self.timeout = Path(path), timeout
         self.calendar = calendar
+        self._verification: ContextVar[dict[str, _VerifiedEvidence] | None] = ContextVar(
+            "swing_request_verification", default=None)
 
     @contextmanager
     def connection(self, *, write: bool = False):
@@ -81,24 +92,76 @@ class SwingRepository:
                 raise ValueError("Unknown snapshot")
             return json.loads(row[0])
 
-    def verify(self, vintage: str) -> dict:
-        """Explicit evidence verification, without opening or changing the source project."""
+    @contextmanager
+    def verification_scope(self):
+        """Reuse evidence within one synchronous read; rehash before returning it.
+
+        Nested reads share the scope. Context-local state is always discarded,
+        including on error, and never becomes a cross-request freshness cache.
+        """
+        if self._verification.get() is not None:
+            yield
+            return
+        verified: dict[str, _VerifiedEvidence] = {}
+        token = self._verification.set(verified)
+        try:
+            yield
+            # A full closing check detects same-size edits even when timestamps
+            # are restored. A stat/mtime cache would weaken the old hash checks.
+            try:
+                for vintage, original in verified.items():
+                    if self._read_evidence(vintage).metadata != original.metadata:
+                        raise ValueError("Snapshot metadata changed during read")
+            except FileNotFoundError as exc:
+                raise ValueError("Referenced immutable evidence is missing") from exc
+        finally:
+            self._verification.reset(token)
+
+    def _metadata(self, vintage: str) -> dict:
         with self.connection() as conn:
             row = conn.execute("SELECT * FROM snapshots WHERE id=?", (vintage,)).fetchone()
             if row is None:
                 raise ValueError("Unknown snapshot")
-            artifact = Path(row["artifact_path"])
-            if file_hash(artifact) != vintage:
-                raise ValueError("Snapshot artifact hash mismatch")
-            header = json.loads(row["header"])
-            universe = artifact.parent.parent / f"universe-{header['universe_sha256']}.csv"
-            if file_hash(universe) != header["universe_sha256"]:
-                raise ValueError("Universe artifact hash mismatch")
-            if header.get("reuse_manifest_sha256"):
-                reuse = artifact.parent.parent / f"reuse-{header['reuse_manifest_sha256']}.json"
-                if file_hash(reuse) != header["reuse_manifest_sha256"]:
-                    raise ValueError("Reuse manifest hash mismatch")
-            return {"snapshot_id": vintage, "artifact_verified": True, "universe_verified": True}
+            return dict(row)
+
+    def _read_evidence(self, vintage: str) -> _VerifiedEvidence:
+        metadata = self._metadata(vintage)
+        artifact = Path(metadata["artifact_path"])
+        if file_hash(artifact) != vintage:
+            raise ValueError("Snapshot artifact hash mismatch")
+        header = json.loads(metadata["header"])
+        universe = artifact.parent.parent / f"universe-{header['universe_sha256']}.csv"
+        # Retain the exact hashed bytes for names; do not reopen unverified CSV
+        # content later in the request (even if an edit is subsequently undone).
+        content = universe.read_bytes()
+        if hashlib.sha256(content).hexdigest() != header["universe_sha256"]:
+            raise ValueError("Universe artifact hash mismatch")
+        if header.get("reuse_manifest_sha256"):
+            reuse = artifact.parent.parent / f"reuse-{header['reuse_manifest_sha256']}.json"
+            if file_hash(reuse) != header["reuse_manifest_sha256"]:
+                raise ValueError("Reuse manifest hash mismatch")
+        return _VerifiedEvidence(tuple(sorted(metadata.items())), content)
+
+    def _evidence(self, vintage: str) -> _VerifiedEvidence:
+        scope = self._verification.get()
+        if scope is not None and vintage in scope:
+            evidence = scope[vintage]
+            if tuple(sorted(self._metadata(vintage).items())) != evidence.metadata:
+                raise ValueError("Snapshot metadata changed during read")
+            return evidence
+        evidence = self._read_evidence(vintage)
+        if scope is not None:
+            scope[vintage] = evidence
+        return evidence
+
+    def verify(self, vintage: str) -> dict:
+        """Hash evidence freshly unless an enclosing read owns its verification."""
+        self._evidence(vintage)
+        return {"snapshot_id": vintage, "artifact_verified": True, "universe_verified": True}
+
+    def universe_bytes(self, vintage: str) -> bytes:
+        """Return the frozen universe bytes actually checked by verification."""
+        return self._evidence(vintage).universe
 
     @staticmethod
     def _visible(conn, vintage: str, as_of: datetime):
